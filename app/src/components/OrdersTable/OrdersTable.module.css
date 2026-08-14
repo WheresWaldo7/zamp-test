@@ -1,0 +1,71 @@
+.scrollContainer {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 100px 1.5fr 1.5fr 120px 100px 80px;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--panel-bg);
+  z-index: 1;
+}
+
+.virtualInner {
+  position: relative;
+  width: 100%;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 100px 1.5fr 1.5fr 120px 100px 80px;
+  gap: 8px;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--row-hover-bg);
+}
+
+.rowSelected {
+  background: var(--row-selected-bg);
+}
+
+.cellMuted {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+  width: fit-content;
+}
+
+.badgePending { background: #fef3c7; color: #92400e; }
+.badgeProcessing { background: #dbeafe; color: #1e40af; }
+.badgeShipped { background: #ede9fe; color: #5b21b6; }
+.badgeDelivered { background: #dcfce7; color: #166534; }
+.badgeCancelled { background: #fee2e2; color: #991b1b; }

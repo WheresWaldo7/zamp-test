@@ -1,0 +1,35 @@
+.panel {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.list {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.itemDragging {
+  opacity: 0.5;
+}

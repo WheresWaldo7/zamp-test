@@ -1,0 +1,77 @@
+.toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.trigger {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+  cursor: default;
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  z-index: 10;
+}
+
+/* Invisible bridge across the 4px gap left by margin-top. Without it, a
+   diagonal move from the trigger into the menu passes over page background,
+   which fires mouseleave on .menuWrap (and drops :hover for the CSS-only
+   menu) before the pointer ever lands on an item. The bridge is a child of
+   the dropdown, so hovering it keeps both the wrapper and the dropdown
+   hovered. Height covers the 4px margin plus the 1px border it sits behind. */
+.dropdown::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 6px;
+}
+
+.dropdownItem {
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.dropdownItem:hover {
+  background: var(--row-hover-bg);
+}
+
+/* The React-driven menu: visibility is controlled entirely by component
+   state (open/closed), not by :hover, so it can be replayed by dispatching
+   the same pointer/mouse events React listens for. */
+.reactDropdownHidden {
+  display: none;
+}
+
+/* The CSS-only menu: visibility is controlled purely by the :hover
+   pseudo-class. There is no JS event to intercept or replay — this is
+   rendering-engine state that only real pointer input can trigger. */
+.cssDropdown {
+  display: none;
+}
+
+.cssMenuWrap:hover .cssDropdown {
+  display: block;
+}

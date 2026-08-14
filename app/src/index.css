@@ -1,0 +1,29 @@
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --panel-bg: #fafafa;
+  --border: #e5e4e7;
+  --accent: #7c3aed;
+  --row-hover-bg: #f4f3ff;
+  --row-selected-bg: #ede9fe;
+
+  font: 14px/145% system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text-h);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
