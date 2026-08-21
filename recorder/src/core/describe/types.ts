@@ -30,4 +30,9 @@ export interface RecordingStep {
   target: DescribedTarget | null;
   createdAt: number;
   updatedAt: number;
+  /** Replay skips rather than fails when this step's target can't be found —
+   *  for things like a cookie banner that only shows up some of the time.
+   *  Not inferred automatically; Stage 4's step-list UI is where a human
+   *  marks a step this way. */
+  optional?: boolean;
 }

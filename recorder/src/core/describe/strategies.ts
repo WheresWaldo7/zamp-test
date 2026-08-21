@@ -195,4 +195,12 @@ export const structStrategy: Strategy = {
 };
 
 export const STRATEGIES: Strategy[] = [roleStrategy, labelStrategy, textStrategy, attrStrategy, structStrategy];
+
+// Replay needs to go the other direction: given a candidate's `kind`, find
+// the same strategy that produced it, so it can re-run find() against the
+// live DOM using the exact matching logic the candidate was scored with.
+export const STRATEGY_BY_KIND: Record<CandidateKind, Strategy> = Object.fromEntries(
+  STRATEGIES.map((strategy) => [strategy.kind, strategy]),
+) as Record<CandidateKind, Strategy>;
+
 export { MACHINE_GENERATED_RE };

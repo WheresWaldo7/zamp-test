@@ -8,7 +8,10 @@ export function getRealTarget(event: Event): Element | null {
   return first instanceof Element ? first : null;
 }
 
-function describe(element: Element): string {
+// Shared with replay: the same descriptor is used to both record a
+// frame/shadow host at capture time and re-find that same host later, so the
+// two sides can never drift apart.
+export function describeHostSegment(element: Element): string {
   return element.id ? `#${element.id}` : element.tagName.toLowerCase();
 }
 
@@ -17,7 +20,7 @@ export function getShadowPath(element: Element): string[] {
   let node: Node = element;
   let root = node.getRootNode();
   while (root instanceof ShadowRoot) {
-    path.unshift(describe(root.host));
+    path.unshift(describeHostSegment(root.host));
     node = root.host;
     root = node.getRootNode();
   }
@@ -29,7 +32,7 @@ export function getFramePath(element: Element): string[] {
   try {
     let view = element.ownerDocument.defaultView;
     while (view && view.frameElement) {
-      path.unshift(describe(view.frameElement));
+      path.unshift(describeHostSegment(view.frameElement));
       view = view.frameElement.ownerDocument.defaultView;
     }
   } catch {
