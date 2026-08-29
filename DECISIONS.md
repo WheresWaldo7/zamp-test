@@ -160,3 +160,120 @@ This is what keeps the injected-script decision reversible. Wrapping the whole
 thing in a browser extension is an adapter swap rather than a rewrite.
 
 **Cost:** more indirection than a single-purpose tool needs.
+
+---
+
+### Anchor a step to its row, not to the cell that was clicked
+
+A step recorded "click the element reading $317.60" because that is where the
+cursor landed. Aim at the same row's status cell on the next pass and the same
+intention records as "click the element reading cancelled". The process then
+believed its input was a price, and substituting into it produced a string
+that exists nowhere on the page.
+
+So a target now carries the repeated unit it sits inside — the row — and is
+re-pointed by moving that scope rather than by rewriting selector text. Which
+text identifies a row is worked out rather than assumed: an order id names one
+row because it appears in exactly one, while "Pending" appears in dozens and a
+company name in four.
+
+A repeated unit has to be several same-shaped siblings, not just a selector
+that matches twice somewhere. Without that, the order drawer — whose contents
+also change between runs — reads as a list, and "click Save" becomes a per-run
+input.
+
+**Cost:** more captured per step, and a heuristic that is only as good as the
+page's structure. A list whose rows share no unique field gets no scope and
+falls back to the old behaviour.
+
+---
+
+### One repeated action is a process only if it is a drag
+
+Dragging four items into order is four whole units of work, and requiring a
+process to be at least two steps long described that as "two drags, done
+twice" — then demanded two items every time it ran.
+
+Nothing else qualifies. Opening one order after another names things without
+changing them, which is reading. Typing in a filter box changes something
+without naming it, and two searches in a row is how everyone uses a search
+box; treating that as a procedure means announcing a process for ordinary
+typing, and worse, it outranks the real multi-step work happening around it.
+
+The rule is that the single action must both pick out what it acts on and
+change it. Only a drag does both.
+
+**Cost:** arbitrary-looking from outside, and wrong for any app where one
+click is genuinely a unit of work — approving rows one at a time, say.
+
+---
+
+### A run of identical steps is never a multi-step process
+
+Type, backspace, type again and you get four steps that look alike. A uniform
+run matches a pattern of every length up to half its own, so it was read as
+"two steps, done twice" — a process wanting two search terms, when one person
+used one search box. Handing it two values typed the second into the same box,
+so the first search never ran.
+
+A stretch of identical steps has no shape of its own. The only honest reading
+is a single step repeated, which is handled above and limited to drags.
+
+**Cost:** a genuine two-step cycle made of one repeated action — type a term,
+clear it, repeat — is invisible. The values have a rhythm the signatures do
+not, and nothing looks at that.
+
+---
+
+### A run stops when it cannot find the thing it was given
+
+Replaying a batch continues past a failed step, so one cosmetic miss does not
+abandon the rest. That is wrong for the step that picks the instance: every
+step after it means "do this to whatever is open now", so a mistyped id set a
+status and saved whatever happened to be on screen.
+
+That step is now marked, and failing it ends the run. It also no longer offers
+to heal. Healing asks a human where an element went, which is right when the
+app was rebuilt and wrong when the value came from that same human seconds
+ago — it stalled unattended batches on a prompt nobody was there to answer,
+and invited pointing at some other row.
+
+**Cost:** a genuine selector break on that one step now fails instead of
+asking for help.
+
+---
+
+### Fewer values than inputs means "leave the rest as recorded"
+
+The tool sometimes counts something as an input that the person never varied
+on purpose. A rating star reads "☆" or "★" depending on the order's score, so
+clicking the same star on two differently-rated orders looks like picking two
+different things.
+
+Demanding a value for every input it thinks it saw turns a process that could
+be run with an order number into one that cannot be run at all. Too many
+values is still an error — that is a request that cannot be honoured, rather
+than one that can be honoured in part.
+
+**Cost:** an omitted input falls back to the recorded description, which may
+be ambiguous. Omit the star and the rating lands on the wrong one.
+
+---
+
+### The panel starts collapsed
+
+Expanded, it is around 370px tall against the right edge. On a 1280×720
+laptop that is exactly where the detail pane's controls live — the status
+select, the rating, and in the refactored variant the Save button itself.
+
+The failure is not subtle and gives no clue: press Record, then find that Save
+does nothing, with nothing to suggest the tool you just started is swallowing
+the click. Replay was never affected, because it already treats the panel as
+an overlay to see through; only the human was blocked.
+
+There is no free corner. The table's id column is on the left and the pane is
+on the right, so moving the panel only changes which one it breaks. Collapsed
+it clears the pane while still showing the controls and the notice.
+
+**Cost:** the step list — the most legible part of a replay — is one click
+away instead of visible by default.

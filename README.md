@@ -31,7 +31,9 @@ cd ../app && npm install && npm run dev
 
 Open the dev server URL. The recorder auto-injects in development (a Vite
 plugin scoped with `apply: 'serve'`, so it never reaches a production build)
-and a panel appears in the top-right.
+and a panel appears in the top-right, collapsed — click its header to unfold
+the step list. It starts collapsed because expanded it covers the app's own
+controls on a laptop-sized window, which is a bad way to meet a tool.
 
 1. **Let it watch.** Press Record, then do something twice — open an order, set
    its status to Processing, save; then do the same for a second order.
@@ -39,7 +41,11 @@ and a panel appears in the top-right.
    has seen it, and what varied between runs.
 3. **Hand it the rest.** Type the orders you haven't done, one per line, and
    press *Do the rest for me*. It works through them with each target
-   highlighted as it goes.
+   highlighted as it goes. If it found more than one input, the first is the
+   one that matters — give it alone and the rest run as recorded.
+
+If the cookie banner is showing, dismiss it first. It appears on half of loads
+by design and it sits on top of the Save button.
 
 Then, for the resilience half:
 
@@ -114,8 +120,14 @@ What the signature keeps, in order of preference:
 | Kept | Why it generalises |
 |---|---|
 | Role — `combobox[name="Status"]` | Identical on every run |
-| Class or id — `._cellMuted_11v6d_52` | Shared by *every* row's id cell, so it generalises across rows precisely because it is generic |
 | Structure with indices stripped | `div:nth-of-type(7) > span` and `div:nth-of-type(12) > span` are the same cell in different rows |
+| Class or id — `._cellMuted_11v6d_52` | Shared by every row's id cell, so it generalises across rows precisely because it is generic |
+
+Structure ranks above class because a class is only shared by *some* of the
+things a person treats as equivalent. Clicking a row's id cell and clicking its
+company cell are the same intention — open that order — but only the id cell
+carries a class, so preferring the class gave the two clicks different shapes
+and the repetition went unnoticed.
 
 Visible text is deliberately never used. It is the most instance-specific
 thing on an element — which makes it the best selector for replaying one step
@@ -168,6 +180,20 @@ than rewriting them: a step that can no longer identify its target should fail
 and ask, because a wrong action taken confidently is worse than an action not
 taken.
 
+Which leaves the question of how the right row is found instead. A step
+recorded inside a list carries the **repeated unit** it sat in, and is
+re-pointed by moving that scope rather than by editing selector text — so
+`._row_11v6d_29 containing "ORD-1044" › #4` finds the same cell of a different
+row even when nothing about the recorded cell ever mentioned an order id. That
+matters because nobody clicks the same column twice: aim at the total on one
+pass and the status on the next, and the recorded texts are "$317.60" and
+"cancelled", neither of which names anything a person could ask for.
+
+A run that cannot find the thing it was given stops there rather than
+continuing. Every step after the one that picks the instance means "do this to
+whatever is open now", so carrying on past it would set a status and save
+whatever happened to be on screen.
+
 Steps that take an input are copied per run; steps that don't are shared on
 purpose. If replay has to ask where the Save button went, that answer is
 learned once and holds for the whole batch instead of being asked ten times.
@@ -180,9 +206,16 @@ reload restores the seeded data.
 
 Only consecutive repetition counts. Someone grinding through a queue does the
 work back to back, and requiring that is what stops unrelated actions that
-merely recur across a session from being mistaken for a procedure. A single
-step repeated is also ignored — that is someone browsing, not a process worth
-offering to take over.
+merely recur across a session from being mistaken for a procedure.
+
+A single step repeated is ignored unless it is a drag. The test is whether the
+one action both picks out what it acts on and changes it: opening one order
+after another names things without changing them, and typing in a filter box
+changes something without naming it, but a drag does both. And a stretch of
+*identical* steps is never read as a multi-step process at all — type,
+backspace, type again and a uniform run would otherwise match a pattern of
+every length up to half its own, turning one person using one search box into
+a procedure demanding two search terms.
 
 ---
 
@@ -450,11 +483,14 @@ recorder/src/
     describe/
       strategies.ts        the five strategies; describe() doubles as match()
       describeElement.ts   the scoring function
+      scope.ts             the repeated unit a target sits in, and which
+                           text picks this one out from its siblings
       describeRecording.ts CapturedStep[] -> RecordingStep[]
     learn/
       signature.ts         a step's shape, with the instance stripped out
       detectRepetition.ts  the strongest consecutive repeat in what was done
       generalize.ts        occurrences -> a process plus what varies
+      instantiate.ts       a process plus inputs -> the steps for one run
     replay/
       findTarget.ts        candidate fallthrough, virtualization scroll-retry
       actionability.ts     visible / stable / enabled / hittable polling
@@ -513,18 +549,20 @@ dominate a total that is supposed to describe the system.
 npm install && npm test
 ```
 
-Nineteen Playwright tests, run in CI on every push. Playwright is the
+Forty-six Playwright tests, run in CI on every push. Playwright is the
 *harness*, not the delivery mechanism — the recorder still runs as an injected
 page script driving the DOM with untrusted events, and Playwright only opens
-the browser and reads results back out.
+the browser and reads results back out. The recorder itself has no runtime
+dependencies at all.
 
 The suite pins both halves of the thesis:
 
 - **Learning happens by watching.** One pass teaches it nothing; two passes
   produce a process; three passes with a varying status produce two inputs
   instead of one. Opening three orders without doing anything to them is
-  correctly ignored, because a single repeated step is browsing rather than a
-  procedure.
+  correctly ignored: opening things names them without changing them, which is
+  reading. A drag is the exception — it both names what it acts on and moves
+  it, so one drag repeated is a process with one input.
 - **A learned process runs against inputs the user never touched**, changes
   only the orders it was handed, and substitutes the right row rather than the
   position it happened to learn — the case where a stale structural candidate
@@ -543,6 +581,24 @@ would understate it.
 The suite is load-bearing rather than decorative. Demoting the role strategy's
 base weight from 100 to 10 fails four tests, including "the Save button is
 still found after moving to a new parent".
+
+### The robustness suite
+
+`robustness.spec.ts` was written the other way round from the two above it.
+Those were written alongside the design, so they mostly ask whether it does
+what it was built to do. These were written by sitting down and trying to
+break it, and most of them failed the first time they ran. What they have in
+common is that they are all things a person would plausibly do on a first
+sitting without being told not to: start recording half way down the list,
+start it with an order already open, click a different column each pass, type
+and backspace in the search box, ask for an order that isn't there, ask for
+one hidden behind a filter, run the same process twice, run it against an
+order near the bottom of a hundred and fifty.
+
+Five real defects came out of that, and the worst of them was not in the
+recorder at all: expanded, the panel covered the app's own Save button on a
+1280×720 laptop, so the first thing a new user would do is press Record and
+find the app dead. [DECISIONS.md](DECISIONS.md) has the rest.
 
 ---
 
