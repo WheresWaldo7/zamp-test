@@ -3,6 +3,7 @@ import { describeStepForHuman } from '../heal/describeForHuman';
 import { healDragDestination, healStepTarget } from '../heal/healStep';
 import { waitForActionable, NotActionableError } from './actionability';
 import { findTarget, type FoundTarget } from './findTarget';
+import { waitForQuiescence } from './quiescence';
 import {
   performClick,
   performInput,
@@ -33,6 +34,15 @@ async function resolveWithHealing(
   const found = await findTarget(target);
   if (found) return { found, healed: false };
   if (!options.onHeal) return { found: null, healed: false };
+
+  // Finding nothing usually means findTarget just finished scrolling every
+  // container hunting for the element and put them all back. It restores the
+  // scroll positions, but a virtualized list re-renders a tick later — so at
+  // this exact moment the DOM can still be showing rows from wherever the
+  // probe wandered to. Asking a human to point at the right element while the
+  // page is mid-settle is asking them to point at something that is about to
+  // move.
+  await waitForQuiescence(150, 1000);
 
   const picked = await options.onHeal({
     step,

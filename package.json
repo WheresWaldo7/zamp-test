@@ -1,0 +1,15 @@
+{
+  "name": "zamp-assignment",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build:recorder": "npm run build --prefix recorder",
+    "typecheck": "npm run typecheck --prefix recorder && tsc -b app",
+    "test": "npm run build:recorder && playwright test",
+    "test:headed": "npm run build:recorder && playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1"
+  }
+}
