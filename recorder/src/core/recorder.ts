@@ -18,7 +18,10 @@ export class Recorder {
   private scrollSessions = new Map<Element, { step: CapturedStep; timer: ReturnType<typeof setTimeout> }>();
   private suppressClick = false;
 
-  private readonly hover = new HoverCapture((target) => this.emit({ type: 'hover' }, target));
+  private readonly hover = new HoverCapture(
+    (target) => this.emit({ type: 'hover' }, target),
+    (element) => this.isIgnored(element),
+  );
   private readonly drag = new DragCapture({
     onDrag: (from, to) => this.emit({ type: 'drag', to }, from),
     suppressNextClick: () => {
@@ -27,12 +30,30 @@ export class Recorder {
         this.suppressClick = false;
       });
     },
+    isIgnored: (element) => this.isIgnored(element),
   });
 
   private readonly originalPushState = history.pushState.bind(history);
   private readonly originalReplaceState = history.replaceState.bind(history);
 
   onStep: ((step: CapturedStep) => void) | null = null;
+
+  /** Set by the adapter so the recorder never records interactions with the
+   *  recorder's own UI. Core deliberately has no idea what that UI is — it
+   *  just knows some elements aren't part of the app being recorded. */
+  shouldIgnore: ((element: Element) => boolean) | null = null;
+
+  private isIgnored(element: Element): boolean {
+    return this.shouldIgnore?.(element) ?? false;
+  }
+
+  /** Every handler goes through this rather than resolveTarget directly, so
+   *  the ignore rule can't be forgotten in one branch. */
+  private resolve(event: Event): CapturedTarget | null {
+    const target = resolveTarget(event);
+    if (!target) return null;
+    return this.isIgnored(target.element) ? null : target;
+  }
 
   start() {
     if (this.listening) return;
@@ -101,7 +122,7 @@ export class Recorder {
 
   private handleClick = (event: MouseEvent) => {
     if (this.suppressClick) return; // a drag on this same interaction already emitted a step
-    const target = resolveTarget(event);
+    const target = this.resolve(event);
     if (!target) return;
 
     // Clicking a <label for="x"> fires a click on the label, then a second,
@@ -110,11 +131,20 @@ export class Recorder {
     // and the control's click (which follows synchronously) stands for it.
     if (target.element instanceof HTMLLabelElement && target.element.control) return;
 
+    // Opening and picking from a <select> costs two clicks, and neither can
+    // ever be replayed: the picker is drawn by the browser/OS, has no DOM
+    // representation, and doesn't respond to a synthetic click. The 'change'
+    // step that follows carries the entire intention — "set status to
+    // pending" — so recording the clicks would only add steps that are
+    // guaranteed to do nothing. Same reasoning as coalescing keystrokes:
+    // keep the intent, drop the mechanics.
+    if (target.element instanceof HTMLSelectElement) return;
+
     this.emit({ type: 'click' }, target);
   };
 
   private handleInput = (event: Event) => {
-    const target = resolveTarget(event);
+    const target = this.resolve(event);
     if (!target) return;
     const el = target.element;
     if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return;
@@ -143,7 +173,7 @@ export class Recorder {
   }
 
   private handleChange = (event: Event) => {
-    const target = resolveTarget(event);
+    const target = this.resolve(event);
     if (!target) return;
     const el = target.element;
 
@@ -160,11 +190,13 @@ export class Recorder {
   };
 
   private handleSubmit = (event: Event) => {
-    this.emit({ type: 'submit' }, resolveTarget(event));
+    const target = this.resolve(event);
+    if (!target) return;
+    this.emit({ type: 'submit' }, target);
   };
 
   private handleFocusIn = (event: FocusEvent) => {
-    const target = resolveTarget(event);
+    const target = this.resolve(event);
     if (!target) return;
     if (this.pendingInput && this.pendingInput.target?.element !== target.element) {
       this.finalizePendingInput();
@@ -173,7 +205,7 @@ export class Recorder {
   };
 
   private handleFocusOut = (event: FocusEvent) => {
-    const target = resolveTarget(event);
+    const target = this.resolve(event);
     if (!target) return;
     if (this.pendingInput?.target?.element === target.element) this.finalizePendingInput();
     this.emit({ type: 'blur' }, target);
@@ -183,6 +215,7 @@ export class Recorder {
     const raw = event.target;
     const element = raw === document ? (document.scrollingElement ?? document.documentElement) : raw;
     if (!(element instanceof Element)) return;
+    if (this.isIgnored(element)) return;
 
     const existing = this.scrollSessions.get(element);
     if (existing) {

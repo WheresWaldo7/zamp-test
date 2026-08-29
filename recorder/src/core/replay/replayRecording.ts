@@ -12,9 +12,13 @@ export async function replayRecording(
 ): Promise<ReplayStepResult[]> {
   const results: ReplayStepResult[] = [];
 
-  for (const step of steps) {
+  for (let index = 0; index < steps.length; index++) {
+    const step = steps[index];
+    options.onStepStart?.(step, index);
+
     const result = await replayStep(step, options);
     results.push(result);
+    options.onStepResult?.(result, index);
     console.log('[replay]', result);
 
     if (result.status === 'failed' && !options.continueOnFailure) break;

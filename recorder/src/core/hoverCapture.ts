@@ -22,11 +22,15 @@ interface HoverSession {
 export class HoverCapture {
   private session: HoverSession | null = null;
 
-  constructor(private onHover: (target: CapturedTarget) => void) {}
+  constructor(
+    private onHover: (target: CapturedTarget) => void,
+    private isIgnored: (element: Element) => boolean = () => false,
+  ) {}
 
   private handleOver = (event: MouseEvent) => {
     const target = resolveTarget(event);
-    if (!target || this.session?.target.element === target.element) return;
+    if (!target || this.isIgnored(target.element)) return;
+    if (this.session?.target.element === target.element) return;
     this.reset();
 
     const observer = new MutationObserver(() => {

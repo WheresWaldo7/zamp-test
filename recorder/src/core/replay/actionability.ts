@@ -43,15 +43,30 @@ function hitTestRoot(element: Element): DocumentOrShadowRoot {
   return root instanceof ShadowRoot ? root : document;
 }
 
-function isHittable(element: Element, rect: DOMRect): boolean {
+/**
+ * The recorder's own panel is a fixed overlay, so it can sit on top of the
+ * very controls replay is trying to click — and then hit-testing reports
+ * "something else is covering this" about the tool itself. Walking the full
+ * hit stack and skipping anything the caller marks as overlay keeps the
+ * tooling invisible to the app it's driving, the same way the recorder
+ * already refuses to record its own UI.
+ */
+function isHittable(element: Element, rect: DOMRect, isOverlay?: (el: Element) => boolean): boolean {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
-  const hit = hitTestRoot(element).elementFromPoint(cx, cy);
+  const root = hitTestRoot(element);
+
+  const stack = isOverlay ? root.elementsFromPoint(cx, cy).filter((el) => !isOverlay(el)) : null;
+  const hit = stack ? (stack[0] ?? null) : root.elementFromPoint(cx, cy);
+
   return hit !== null && (hit === element || element.contains(hit));
 }
 
 export interface ActionabilityOptions {
   timeoutMs?: number;
+  /** Elements that belong to the recorder's UI rather than the page under
+   *  test, and so should not count as occluding anything. */
+  isOverlay?: (element: Element) => boolean;
 }
 
 /**
@@ -66,7 +81,12 @@ export async function waitForActionable(element: Element, options: Actionability
 
   while (Date.now() < deadline) {
     const rect = element.getBoundingClientRect();
-    if (isVisible(rect) && isEnabled(element) && isHittable(element, rect) && (await isStableNow(element))) {
+    if (
+      isVisible(rect) &&
+      isEnabled(element) &&
+      isHittable(element, rect, options.isOverlay) &&
+      (await isStableNow(element))
+    ) {
       return;
     }
     await sleep(POLL_INTERVAL_MS);

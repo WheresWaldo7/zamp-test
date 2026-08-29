@@ -2,7 +2,7 @@ import type { CapturedAction, CapturedStep, CapturedTarget } from '../types';
 import { describeElement } from './describeElement';
 import type { DescribedTarget, RecordingAction, RecordingStep } from './types';
 
-function describeTarget(target: CapturedTarget): DescribedTarget {
+export function describeTarget(target: CapturedTarget): DescribedTarget {
   return {
     candidates: describeElement(target.element),
     frame: target.frame,

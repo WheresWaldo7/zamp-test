@@ -20,6 +20,9 @@ interface DragCaptureOptions {
   /** Called when a real drag is confirmed, so the caller can drop the
    *  trailing native `click` event the browser still fires on pointerup. */
   suppressNextClick: () => void;
+  /** Lets the caller exclude elements that aren't part of the app being
+   *  recorded — the recorder's own UI, for instance. */
+  isIgnored?: (element: Element) => boolean;
 }
 
 /**
@@ -35,7 +38,7 @@ export class DragCapture {
   private handleDown = (event: PointerEvent) => {
     if (!event.isPrimary) return;
     const target = resolveTarget(event);
-    if (!target) return;
+    if (!target || this.options.isIgnored?.(target.element)) return;
     this.state = {
       pointerId: event.pointerId,
       from: target,

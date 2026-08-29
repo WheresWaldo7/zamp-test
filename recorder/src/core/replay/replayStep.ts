@@ -1,6 +1,8 @@
-import type { RecordingStep } from '../describe/types';
+import type { DescribedTarget, RecordingStep } from '../describe/types';
+import { describeStepForHuman } from '../heal/describeForHuman';
+import { healDragDestination, healStepTarget } from '../heal/healStep';
 import { waitForActionable, NotActionableError } from './actionability';
-import { findTarget } from './findTarget';
+import { findTarget, type FoundTarget } from './findTarget';
 import {
   performClick,
   performInput,
@@ -15,6 +17,37 @@ import {
 } from './performAction';
 import type { ReplayOptions, ReplayStepResult } from './types';
 
+/**
+ * Finds a target, and if every candidate has been exhausted, gives the
+ * caller's heal handler a chance to have a human point at the right element
+ * instead. A successful re-point rewrites the step's candidates in place, so
+ * the correction holds for the rest of the run rather than being re-asked on
+ * every repetition.
+ */
+async function resolveWithHealing(
+  step: RecordingStep,
+  target: DescribedTarget,
+  role: 'target' | 'dragDestination',
+  options: ReplayOptions,
+): Promise<{ found: FoundTarget | null; healed: boolean }> {
+  const found = await findTarget(target);
+  if (found) return { found, healed: false };
+  if (!options.onHeal) return { found: null, healed: false };
+
+  const picked = await options.onHeal({
+    step,
+    role,
+    description: describeStepForHuman(step.action, target),
+  });
+  if (!picked) return { found: null, healed: false };
+
+  const patched = role === 'target' ? healStepTarget(step, picked) : healDragDestination(step, picked);
+  return {
+    found: { element: picked, candidate: patched.candidates[0] },
+    healed: true,
+  };
+}
+
 export async function replayStep(step: RecordingStep, options: ReplayOptions = {}): Promise<ReplayStepResult> {
   if (step.action.type === 'navigation') {
     performNavigation(step.action.url);
@@ -25,7 +58,7 @@ export async function replayStep(step: RecordingStep, options: ReplayOptions = {
     return { stepId: step.id, status: 'failed', error: 'step has no target' };
   }
 
-  const found = await findTarget(step.target);
+  const { found, healed } = await resolveWithHealing(step, step.target, 'target', options);
   if (!found) {
     if (step.optional) return { stepId: step.id, status: 'skipped' };
     return { stepId: step.id, status: 'failed', error: 'no candidate resolved to a unique element' };
@@ -39,12 +72,17 @@ export async function replayStep(step: RecordingStep, options: ReplayOptions = {
   found.element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
   try {
-    await waitForActionable(found.element, { timeoutMs: options.actionTimeoutMs });
+    await waitForActionable(found.element, {
+      timeoutMs: options.actionTimeoutMs,
+      isOverlay: options.isOverlay,
+    });
   } catch (error) {
     if (step.optional) return { stepId: step.id, status: 'skipped' };
     const message = error instanceof NotActionableError ? error.message : String(error);
     return { stepId: step.id, status: 'failed', error: message };
   }
+
+  let healedDestination = false;
 
   switch (step.action.type) {
     case 'click':
@@ -72,15 +110,20 @@ export async function replayStep(step: RecordingStep, options: ReplayOptions = {
       performHover(found.element);
       break;
     case 'drag': {
-      const dragTo = await findTarget(step.action.to);
-      if (!dragTo) {
+      const destination = await resolveWithHealing(step, step.action.to, 'dragDestination', options);
+      if (!destination.found) {
         return { stepId: step.id, status: 'failed', error: 'drag destination not found' };
       }
-      dragTo.element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      await performDrag(found.element, dragTo.element);
+      healedDestination = destination.healed;
+      destination.found.element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      await performDrag(found.element, destination.found.element);
       break;
     }
   }
 
-  return { stepId: step.id, status: 'done', matchedCandidate: found.candidate };
+  return {
+    stepId: step.id,
+    status: healed || healedDestination ? 'healed' : 'done',
+    matchedCandidate: found.candidate,
+  };
 }

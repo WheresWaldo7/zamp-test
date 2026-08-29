@@ -162,27 +162,47 @@ export const attrStrategy: Strategy = {
   },
 };
 
+// An element sitting directly inside a shadow root has no parentElement —
+// its parent is the ShadowRoot, which is a DocumentFragment, not an Element.
+// Stopping there would describe every such element as a bare tag name, which
+// is how all five identical rating stars ended up sharing the descriptor
+// "span" and becoming impossible to tell apart. A ShadowRoot still exposes
+// `children`, so it works fine as an indexing parent; the describe walk just
+// has to be willing to step onto it.
+type StructuralParent = Element | ShadowRoot;
+
+function structuralParent(node: Element): StructuralParent | null {
+  if (node.parentElement) return node.parentElement;
+  const parent = node.parentNode;
+  return parent instanceof ShadowRoot ? parent : null;
+}
+
 export const structStrategy: Strategy = {
   kind: 'struct',
   baseWeight: 20,
   describe(element) {
     const parts: string[] = [];
-    let node: Element | null = element;
+    let node: Element = element;
     let depth = 0;
 
-    while (node && depth < 6) {
-      const parent: Element | null = node.parentElement;
+    while (depth < 6) {
+      const parent = structuralParent(node);
       if (!parent) {
         parts.unshift(node.tagName.toLowerCase());
         break;
       }
-      const sameTagSiblings = Array.from(parent.children).filter((c) => c.tagName === node!.tagName);
+      const tagName = node.tagName;
+      const sameTagSiblings = Array.from(parent.children).filter((c) => c.tagName === tagName);
       const segment =
         sameTagSiblings.length > 1
-          ? `${node.tagName.toLowerCase()}:nth-of-type(${sameTagSiblings.indexOf(node) + 1})`
-          : node.tagName.toLowerCase();
+          ? `${tagName.toLowerCase()}:nth-of-type(${sameTagSiblings.indexOf(node) + 1})`
+          : tagName.toLowerCase();
       parts.unshift(segment);
 
+      // A shadow root is the top of its own tree — the path is already
+      // scoped to it (replay descends via shadowPath), so stop rather than
+      // climbing out into the host document.
+      if (parent instanceof ShadowRoot) break;
       if (parent.id) {
         parts.unshift(`#${parent.id}`);
         break;
