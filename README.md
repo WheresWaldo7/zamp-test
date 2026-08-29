@@ -12,6 +12,9 @@ Two packages, one repo:
   to automation.
 - **`recorder/`** — the recorder itself: capture, describe, replay, heal.
 
+[DECISIONS.md](DECISIONS.md) covers the choices that had a real alternative,
+and what each one cost.
+
 ---
 
 ## Running it
