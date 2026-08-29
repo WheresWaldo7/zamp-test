@@ -54,13 +54,32 @@ export class DragCapture {
     this.state.maxDistance = Math.max(this.state.maxDistance, distance);
   };
 
+  /**
+   * By the time the pointer is released, the drag library has moved the
+   * dragged element under the cursor — so the topmost element at the drop
+   * point is the thing being dragged, not the thing it's being dropped on.
+   * Taking that at face value records "drop Pending onto Pending": a drag
+   * whose destination is its own source, which replays as a no-op.
+   *
+   * Looking past the dragged element (and anything inside it) in the hit
+   * stack finds what is actually underneath, which is the real target.
+   */
+  private findDropTarget(x: number, y: number, source: Element): Element | null {
+    for (const element of document.elementsFromPoint(x, y)) {
+      if (element === source || source.contains(element)) continue;
+      if (this.options.isIgnored?.(element)) continue;
+      return element;
+    }
+    return null;
+  }
+
   private handleUp = (event: PointerEvent) => {
     if (!this.state || event.pointerId !== this.state.pointerId) return;
     const { from, maxDistance } = this.state;
     this.state = null;
     if (maxDistance < DRAG_THRESHOLD_PX) return;
 
-    const dropElement = document.elementFromPoint(event.clientX, event.clientY);
+    const dropElement = this.findDropTarget(event.clientX, event.clientY, from.element);
     const to = dropElement ? toCapturedTarget(dropElement) : from;
 
     this.options.suppressNextClick();
