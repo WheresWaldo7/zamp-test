@@ -17,13 +17,15 @@ import type { LearnedProcess, ProcessVariable } from './generalize';
  * every row, so replay skips them as ambiguous rather than acting on them.
  */
 function retarget(candidates: SelectorCandidate[], from: string, to: string): SelectorCandidate[] {
+  // Only candidates that actually name the instance survive. A candidate that
+  // doesn't mention it — a shared CSS-Module class, a structural path — cannot
+  // distinguish this row from any other, so it is not a weaker way of finding
+  // the right thing; it is a way of finding the wrong thing. Keeping it means
+  // the fallthrough can act on whatever sits at the remembered position and
+  // report success. Better to be left with nothing and ask.
   return candidates
-    .filter((candidate) => candidate.kind !== 'struct' || candidate.value.includes(from))
-    .map((candidate) =>
-      candidate.value.includes(from)
-        ? { ...candidate, value: candidate.value.split(from).join(to) }
-        : candidate,
-    );
+    .filter((candidate) => candidate.value.includes(from))
+    .map((candidate) => ({ ...candidate, value: candidate.value.split(from).join(to) }));
 }
 
 function applyVariable(step: RecordingStep, variable: ProcessVariable, value: string): RecordingStep {

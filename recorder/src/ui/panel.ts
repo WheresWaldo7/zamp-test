@@ -66,7 +66,10 @@ export class Panel {
   private readonly healEl: HTMLElement;
   private readonly healDescEl: HTMLElement;
 
+  private readonly learnedErrorEl: HTMLElement;
+
   private rows: StepRow[] = [];
+  private variableCount = 0;
   private collapsed = false;
 
   constructor(
@@ -101,6 +104,7 @@ export class Panel {
         <div class="learned-name"></div>
         <div class="learned-vars"></div>
         <textarea class="learned-input" rows="2" spellcheck="false"></textarea>
+        <div class="learned-error hidden"></div>
         <button data-act="run" class="primary">Do the rest for me</button>
       </div>
       <div class="heal hidden">
@@ -124,6 +128,7 @@ export class Panel {
     this.learnedVarsEl = panel.querySelector(".learned-vars")!;
     this.learnedInputEl = panel.querySelector(".learned-input")!;
     this.runBtn = panel.querySelector('[data-act="run"]')!;
+    this.learnedErrorEl = panel.querySelector(".learned-error")!;
     this.healEl = panel.querySelector('.heal')!;
     this.healDescEl = panel.querySelector('.heal-desc')!;
 
@@ -131,8 +136,10 @@ export class Panel {
     this.replayBtn.addEventListener('click', () => this.callbacks.onReplay());
     this.clearBtn.addEventListener('click', () => this.callbacks.onClear());
     this.runBtn.addEventListener('click', () => {
-      const runs = this.parseRuns();
-      if (runs.length > 0) this.callbacks.onRunProcess(runs);
+      const { runs, error } = this.parseRuns(this.variableCount);
+      this.learnedErrorEl.textContent = error ?? '';
+      this.learnedErrorEl.classList.toggle('hidden', !error);
+      if (!error && runs.length > 0) this.callbacks.onRunProcess(runs);
     });
 
     this.setupHeaderInteractions();
@@ -359,11 +366,15 @@ export class Panel {
     }
     // The placeholder teaches the format by example rather than explaining
     // it: the values already seen, in the order they'd need to be typed.
+    this.variableCount = process.variables.length;
     this.learnedInputEl.placeholder =
-      process.variables.length === 0
-        ? 'No inputs — one line per repeat'
-        : `${process.variables.map((v) => v.examples[v.examples.length - 1]).join(', ')}\n(one run per line)`;
+      this.variableCount === 0
+        ? 'One line per repeat'
+        : this.variableCount === 1
+          ? `${process.variables[0].examples[process.variables[0].examples.length - 1]}, …  (or one per line)`
+          : `${process.variables.map((v) => v.examples[v.examples.length - 1]).join(', ')}\n(one run per line)`;
 
+    this.learnedErrorEl.classList.add('hidden');
     this.runBtn.disabled = false;
     this.learnedEl.classList.remove('hidden');
   }
@@ -372,14 +383,39 @@ export class Panel {
     this.learnedEl.classList.add('hidden');
   }
 
-  /** One run per line, values comma-separated in variable order. A single
-   *  variable — the common case — reduces to just listing the things to do
-   *  it to, one per line. */
-  private parseRuns(): string[][] {
-    return this.learnedInputEl.value
+  /**
+   * With a single input — the overwhelmingly common case — commas and
+   * newlines both just separate the things to do it to. Anything else is a
+   * trap: typing "ORD-1044, ORD-1050" plainly means two orders, and reading
+   * it as one run with a spare value silently drops half the request.
+   *
+   * With several inputs the comma has to mean "next value", so a line is one
+   * run. A line with the wrong number of values is reported rather than
+   * quietly padded or truncated.
+   */
+  private parseRuns(variableCount: number): { runs: string[][]; error: string | null } {
+    const lines = this.learnedInputEl.value
       .split('\n')
-      .map((line) => line.split(',').map((value) => value.trim()).filter(Boolean))
-      .filter((values) => values.length > 0);
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (variableCount <= 1) {
+      const runs = lines
+        .flatMap((line) => line.split(','))
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .map((value) => [value]);
+      return { runs, error: null };
+    }
+
+    const runs = lines.map((line) => line.split(',').map((value) => value.trim()).filter(Boolean));
+    const wrong = runs.findIndex((values) => values.length !== variableCount);
+    return wrong === -1
+      ? { runs, error: null }
+      : {
+          runs: [],
+          error: `Line ${wrong + 1} has ${runs[wrong].length} value(s); this process needs ${variableCount}.`,
+        };
   }
 
   showHealPrompt(description: string): void {

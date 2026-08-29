@@ -146,6 +146,7 @@ export const PANEL_STYLES = `
     resize: vertical;
   }
   .learned-input::placeholder { color: #4b6b5f; }
+  .learned-error { color: #fca5a5; font-size: 10px; line-height: 1.4; margin-bottom: 8px; }
   .learned .primary { background: #059669; border-color: #059669; }
   .learned .primary:hover { background: #047857; }
 
