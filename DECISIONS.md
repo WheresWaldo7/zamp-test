@@ -41,23 +41,16 @@ the uniqueness penalty. A `text:"Acme Corp"` candidate that matches 56 table
 rows scores below a structural fallback that happens to match exactly one.
 Ranking by strategy alone would confidently pick the ambiguous one.
 
+Generated class names are scored down rather than excluded. The app is styled
+with CSS Modules, so classes arrive as `_row_11v6d_29`, and dropping them
+outright was tempting. Keeping them penalised means the reasoning stays
+visible — you can see a step resting on something fragile — and they can still
+win when nothing better exists.
+
 **Cost:** capture is slower, because scoring checks each candidate's
-uniqueness against the live DOM at record time.
-
----
-
-### Score generated class names low instead of ignoring them
-
-The app is styled with CSS Modules, so classes arrive as `_row_11v6d_29`.
-Excluding them outright was tempting and would have been simpler.
-
-Keeping them, penalised, means the reasoning stays visible in the output —
-you can see that a step is resting on something fragile — and they can still
-win when genuinely nothing better exists.
-
-**Cost:** some steps do end up resting on a generated class, and only the
-score tells you. That's why the run log reports which candidate won and where
-it ranked.
+uniqueness against the live DOM at record time. And some steps do end up
+resting on a generated class, where only the score tells you; that is why the
+run log reports which candidate won and where it ranked.
 
 ---
 
@@ -107,10 +100,19 @@ leak out and change the page being recorded.
 A closed shadow root prevents both. There's a pleasing symmetry in using the
 exact feature the cut list documents as unreachable.
 
+It also starts collapsed. Expanded it is around 370px tall against the right
+edge, which on a 1280×720 laptop is exactly where the detail pane's controls
+live — the status select, the rating, and after the refactor the Save button
+itself. Press Record, find that Save does nothing, and nothing suggests the
+tool you just started is swallowing the click. There is no free corner: the id
+column is on the left and the pane is on the right, so moving it only changes
+which one it breaks.
+
 **Cost:** genuinely unreachable, including by test automation, which cannot
 click into it. That forced a programmatic API (`startRecording()`,
-`panel.collapse()`, and so on) as a parallel way in. Worth it, but it is extra
-surface that exists only because of this choice.
+`panel.collapse()`, and so on) as a parallel way in. And the step list, the
+most legible part of a replay, is now one click away rather than visible by
+default.
 
 ---
 
@@ -130,8 +132,8 @@ capture identity (*the element reading ORD-1006*) rather than a query (*whatever
 is first right now*). And the target set moves as you work — an order stops
 matching a "pending" filter the moment you process it.
 
-Parameterisation, the one plan item left undone, would not fix this. It varies
-*values*, not counts or queries.
+Parameterisation does not fix this, and it was built. It varies *values*, not
+counts or queries.
 
 ---
 
@@ -146,20 +148,6 @@ there is no "same row" to find. Seeding is what makes the exercise possible.
 Everything else about the app is deliberately hostile: CSS Modules, no
 `data-testid`, virtualization, an open shadow root, a cookie banner on half of
 loads, and a pointer-activated drag list.
-
----
-
-### Keep the replay engine ignorant of the UI
-
-`core/` doesn't import anything from `ui/` and doesn't know a panel exists.
-Anything visual arrives as an injected callback: `onHeal` to ask a human,
-`onBeforeAction` to highlight, `isOverlay` to ignore the recorder's own chrome
-during hit-testing.
-
-This is what keeps the injected-script decision reversible. Wrapping the whole
-thing in a browser extension is an adapter swap rather than a rewrite.
-
-**Cost:** more indirection than a single-purpose tool needs.
 
 ---
 
@@ -188,40 +176,30 @@ falls back to the old behaviour.
 
 ---
 
-### One repeated action is a process only if it is a drag
+### What counts as a process
 
-Dragging four items into order is four whole units of work, and requiring a
-process to be at least two steps long described that as "two drags, done
-twice" — then demanded two items every time it ran.
+Two rules, both learned by being wrong about them.
 
-Nothing else qualifies. Opening one order after another names things without
-changing them, which is reading. Typing in a filter box changes something
-without naming it, and two searches in a row is how everyone uses a search
-box; treating that as a procedure means announcing a process for ordinary
-typing, and worse, it outranks the real multi-step work happening around it.
+A single repeated action is a process only if it is a drag. Dragging four
+items into order is four whole units of work, and insisting a process be at
+least two steps long described that as "two drags, done twice" — then demanded
+two items every time it ran. Nothing else qualifies: opening one order after
+another names things without changing them, which is reading, and typing in a
+filter box changes something without naming it. The test is whether the one
+action both picks out what it acts on and changes it.
 
-The rule is that the single action must both pick out what it acts on and
-change it. Only a drag does both.
+A stretch of *identical* steps is never a multi-step process. Type, backspace,
+type again and you get four steps that look alike; a uniform run matches a
+pattern of every length up to half its own, so it was read as "two steps, done
+twice" — a process wanting two search terms, when one person used one search
+box. Such a run has no shape of its own, so the only honest reading is a
+single step repeated, which lands back on the first rule.
 
-**Cost:** arbitrary-looking from outside, and wrong for any app where one
-click is genuinely a unit of work — approving rows one at a time, say.
-
----
-
-### A run of identical steps is never a multi-step process
-
-Type, backspace, type again and you get four steps that look alike. A uniform
-run matches a pattern of every length up to half its own, so it was read as
-"two steps, done twice" — a process wanting two search terms, when one person
-used one search box. Handing it two values typed the second into the same box,
-so the first search never ran.
-
-A stretch of identical steps has no shape of its own. The only honest reading
-is a single step repeated, which is handled above and limited to drags.
-
-**Cost:** a genuine two-step cycle made of one repeated action — type a term,
-clear it, repeat — is invisible. The values have a rhythm the signatures do
-not, and nothing looks at that.
+**Cost:** the drag rule looks arbitrary from outside and is wrong for any app
+where one click is genuinely a unit of work — approving rows one at a time,
+say. And a real two-step cycle made of one repeated action, like typing a term
+and clearing it, is invisible: the values have a rhythm the signatures do not,
+and nothing looks at that.
 
 ---
 
@@ -229,51 +207,14 @@ not, and nothing looks at that.
 
 Replaying a batch continues past a failed step, so one cosmetic miss does not
 abandon the rest. That is wrong for the step that picks the instance: every
-step after it means "do this to whatever is open now", so a mistyped id set a
-status and saved whatever happened to be on screen.
+step after it means "do this to whatever is open now", so a mistyped order id
+set a status and saved whatever happened to be on screen.
 
 That step is now marked, and failing it ends the run. It also no longer offers
-to heal. Healing asks a human where an element went, which is right when the
-app was rebuilt and wrong when the value came from that same human seconds
-ago — it stalled unattended batches on a prompt nobody was there to answer,
-and invited pointing at some other row.
+to heal. Healing asks a human where an element went, which is the right
+question when the app has been rebuilt and the wrong one when the value came
+from that same human seconds ago — it stalled unattended batches on a prompt
+nobody was there to answer, and invited pointing at some other row.
 
 **Cost:** a genuine selector break on that one step now fails instead of
 asking for help.
-
----
-
-### Fewer values than inputs means "leave the rest as recorded"
-
-The tool sometimes counts something as an input that the person never varied
-on purpose. A rating star reads "☆" or "★" depending on the order's score, so
-clicking the same star on two differently-rated orders looks like picking two
-different things.
-
-Demanding a value for every input it thinks it saw turns a process that could
-be run with an order number into one that cannot be run at all. Too many
-values is still an error — that is a request that cannot be honoured, rather
-than one that can be honoured in part.
-
-**Cost:** an omitted input falls back to the recorded description, which may
-be ambiguous. Omit the star and the rating lands on the wrong one.
-
----
-
-### The panel starts collapsed
-
-Expanded, it is around 370px tall against the right edge. On a 1280×720
-laptop that is exactly where the detail pane's controls live — the status
-select, the rating, and in the refactored variant the Save button itself.
-
-The failure is not subtle and gives no clue: press Record, then find that Save
-does nothing, with nothing to suggest the tool you just started is swallowing
-the click. Replay was never affected, because it already treats the panel as
-an overlay to see through; only the human was blocked.
-
-There is no free corner. The table's id column is on the left and the pane is
-on the right, so moving the panel only changes which one it breaks. Collapsed
-it clears the pane while still showing the controls and the notice.
-
-**Cost:** the step list — the most legible part of a replay — is one click
-away instead of visible by default.
