@@ -33,11 +33,18 @@ Open the dev server URL. The recorder auto-injects in development (a Vite
 plugin scoped with `apply: 'serve'`, so it never reaches a production build)
 and a panel appears in the top-right.
 
-1. **Record** — press Record, then use the app.
-2. **Replay** — press Replay. The page reloads to a clean state, then each
-   step runs with the target element highlighted as it goes.
-3. **Replay against v2** — navigate to `?v2` and press Replay again. This is
-   the interesting one.
+1. **Let it watch.** Press Record, then do something twice — open an order, set
+   its status to Processing, save; then do the same for a second order.
+2. **It notices.** A green panel appears naming the process, how many times it
+   has seen it, and what varied between runs.
+3. **Hand it the rest.** Type the orders you haven't done, one per line, and
+   press *Do the rest for me*. It works through them with each target
+   highlighted as it goes.
+
+Then, for the resilience half:
+
+4. **Replay against v2** — navigate to `?v2` and press Replay. Same recording,
+   an app whose class names have all changed and whose Save button has moved.
 
 Everything is also driveable from the console, because the panel lives in a
 closed shadow root and is therefore deliberately unreachable from page
@@ -49,6 +56,9 @@ window.__recorder.stopRecording()
 window.__recorder.getRecording()          // the portable Recording JSON
 window.__recorder.replay()                // reloads first, then runs
 window.__recorder.replay(steps, { reload: false, stepDelayMs: 0 })
+
+window.__recorder.getLearnedProcess()     // what it noticed you repeating
+window.__recorder.runProcess([['ORD-1002'], ['ORD-1003']])
 ```
 
 ---
@@ -137,6 +147,36 @@ examples arrive.
 
 Do the same three orders with three *different* statuses and it finds two
 inputs instead of one, without being told anything had changed.
+
+### Carrying it out
+
+Give it the orders you haven't done and it works through them:
+
+```js
+window.__recorder.runProcess([['ORD-1002'], ['ORD-1003'], ['ORD-1004']])
+```
+
+or type them into the panel, one run per line, and press **Do the rest for
+me**.
+
+Substituting an input is less obvious than swapping a string. The template was
+recorded against the first row, so its structural candidate —
+`… > div:nth-of-type(1) > span` — still resolves perfectly on the page, *to
+the wrong order*. Leaving it in place would let the fallthrough click row one
+and report success. Substitution therefore drops structural candidates rather
+than rewriting them: a step that can no longer identify its target should fail
+and ask, because a wrong action taken confidently is worse than an action not
+taken.
+
+Steps that take an input are copied per run; steps that don't are shared on
+purpose. If replay has to ask where the Save button went, that answer is
+learned once and holds for the whole batch instead of being asked ten times.
+
+Unlike replay, running a process does **not** reload between runs. Replay
+reloads because it is re-performing a journey from the start; this is
+continuing work the user was already doing, and each run leaves a real change
+behind. Reloading would throw the batch away — in this app literally, since a
+reload restores the seeded data.
 
 Only consecutive repetition counts. Someone grinding through a queue does the
 work back to back, and requiring that is what stops unrelated actions that
@@ -473,7 +513,7 @@ dominate a total that is supposed to describe the system.
 npm install && npm test
 ```
 
-Fifteen Playwright tests, run in CI on every push. Playwright is the
+Nineteen Playwright tests, run in CI on every push. Playwright is the
 *harness*, not the delivery mechanism — the recorder still runs as an injected
 page script driving the DOM with untrusted events, and Playwright only opens
 the browser and reads results back out.
@@ -485,6 +525,10 @@ The suite pins both halves of the thesis:
   instead of one. Opening three orders without doing anything to them is
   correctly ignored, because a single repeated step is browsing rather than a
   procedure.
+- **A learned process runs against inputs the user never touched**, changes
+  only the orders it was handed, and substitutes the right row rather than the
+  position it happened to learn — the case where a stale structural candidate
+  would otherwise act confidently on the wrong thing.
 - **v1 replays clean**, and does so repeatably across consecutive runs.
 - **v2** — every class renamed, rows nested deeper, Save button moved — a flow
   recorded against *meaning* survives untouched, while a step recorded against
@@ -504,21 +548,18 @@ still found after moving to a new parent".
 
 ## Status
 
-Working end to end: watching, learning a process and its inputs, replaying it,
-surviving a refactor, asking for help when it genuinely can't, and explaining
-what it did.
+The brief works end to end. Do something twice and it is noticed; the process
+and its inputs are worked out without being declared; hand it the rest and it
+carries them out — surviving a refactor along the way, asking for help when it
+genuinely cannot resolve a step, and explaining afterwards what it did and how
+it got there.
 
-**What isn't built: executing a learned process across new inputs.** The tool
-works out that you processed `ORD-1000`, `ORD-1001` and `ORD-1002`, and that
-the order is the input — but it can't yet be handed `ORD-1003, ORD-1004` and
-told to carry on. That is the second half of "automate it on their behalf",
-and it needs two things: substituting a variable's value into a step's
-candidates, and running the template once per input.
+**The remaining ceiling is that a process takes a list, not a query.** You can
+hand it `ORD-1002, ORD-1003, ORD-1004`. You cannot say "take the top ten
+pending", because that needs the target set re-evaluated as it changes — an
+order stops matching a pending filter the moment you process it — and steps
+capture identity (*the element reading ORD-1006*) rather than a query
+(*whatever is first right now*).
 
-The related ceiling is that a process still can't be pointed at a *query*
-rather than a list. "Take the top ten pending" needs the target set
-re-evaluated as it changes — an order stops matching a pending filter the
-moment you process it — and steps capture identity (*the element reading
-ORD-1006*) rather than a query (*whatever is first right now*). See
-[DECISIONS.md](DECISIONS.md) for why loops and conditionals were cut, and what
-that costs.
+That is the loops-and-conditionals cut, and it is the honest boundary of what
+this is. [DECISIONS.md](DECISIONS.md) covers why it was cut and what it costs.

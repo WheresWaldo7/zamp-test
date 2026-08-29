@@ -114,6 +114,103 @@ test('treats a value that changes every time as a second input', async ({ page }
   expect(status.examples).toEqual(['processing', 'shipped', 'delivered']);
 });
 
+/** Status badge currently shown for an order in the table. */
+async function statusOf(page: import('@playwright/test').Page, orderId: string): Promise<string | null> {
+  return page.evaluate((id) => {
+    const row = Array.from(document.querySelectorAll('[class*="_row_"], [class*="recordLine"]')).find((el) =>
+      (el.textContent ?? '').includes(id),
+    );
+    return (row?.textContent ?? '').match(/(pending|processing|shipped|delivered|cancelled)/)?.[1] ?? null;
+  }, orderId);
+}
+
+async function runProcess(page: import('@playwright/test').Page, runs: string[][]) {
+  return page.evaluate(
+    (runs) =>
+      (window as never as { __recorder: { runProcess(r: string[][]): Promise<unknown[][]> } }).__recorder.runProcess(
+        runs,
+      ),
+    runs,
+  ) as Promise<{ status: string }[][]>;
+}
+
+test('carries the process out for inputs the user never touched', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // The user does two by hand — enough for the process to be learned.
+  await processOrder(page, 'ORD-1000', 'processing');
+  await processOrder(page, 'ORD-1001', 'processing');
+
+  const untouched = ['ORD-1002', 'ORD-1003', 'ORD-1004'];
+  for (const id of untouched) {
+    expect(await statusOf(page, id), `${id} before`).not.toBe('processing');
+  }
+
+  const results = await runProcess(page, untouched.map((id) => [id]));
+
+  expect(results).toHaveLength(3);
+  expect(results.flat().every((step) => step.status === 'done')).toBe(true);
+
+  for (const id of untouched) {
+    expect(await statusOf(page, id), `${id} after`).toBe('processing');
+  }
+});
+
+test('acts only on the inputs it was given', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  await processOrder(page, 'ORD-1000', 'processing');
+  await processOrder(page, 'ORD-1001', 'processing');
+
+  const before = await statusOf(page, 'ORD-1005');
+  await runProcess(page, [['ORD-1002']]);
+
+  expect(await statusOf(page, 'ORD-1002')).toBe('processing');
+  // An order that was never mentioned is left exactly as it was — the
+  // process applies to what it was handed, not to whatever is nearby.
+  expect(await statusOf(page, 'ORD-1005')).toBe(before);
+});
+
+test('substitutes the right row rather than the position it learned', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  await processOrder(page, 'ORD-1000', 'processing');
+  await processOrder(page, 'ORD-1001', 'processing');
+
+  // The template was recorded against the first row. Its structural
+  // candidate still resolves cleanly on this page — to the wrong order — so
+  // substitution has to drop it rather than let the fallthrough act on it.
+  await runProcess(page, [['ORD-1009']]);
+
+  expect(await statusOf(page, 'ORD-1009')).toBe('processing');
+});
+
+test('substitutes a varying value as well as a varying target', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // Two passes with different statuses, so both the order and the status are
+  // learned as inputs.
+  await processOrder(page, 'ORD-1000', 'processing');
+  await processOrder(page, 'ORD-1001', 'shipped');
+
+  const process = (await learned(page))!;
+  const order = process.variables.findIndex((v) => v.kind === 'target');
+  const status = process.variables.findIndex((v) => v.kind === 'value');
+  expect(order).toBeGreaterThanOrEqual(0);
+  expect(status).toBeGreaterThanOrEqual(0);
+
+  const run: string[] = [];
+  run[order] = 'ORD-1004';
+  run[status] = 'delivered';
+  await runProcess(page, [run]);
+
+  expect(await statusOf(page, 'ORD-1004')).toBe('delivered');
+});
+
 test('does not mistake unrelated actions for a process', async ({ page }) => {
   await gotoApp(page, 'v1');
   await watch(page);

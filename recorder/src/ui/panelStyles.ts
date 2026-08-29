@@ -129,8 +129,25 @@ export const PANEL_STYLES = `
   }
   .learned-title { font-weight: 600; color: #6ee7b7; margin-bottom: 4px; }
   .learned-name { color: #d1fae5; line-height: 1.4; margin-bottom: 8px; }
-  .learned-vars { color: #8f8aa3; font-size: 10px; line-height: 1.5; margin-bottom: 10px; }
+  .learned-vars { color: #8f8aa3; font-size: 10px; line-height: 1.5; margin-bottom: 8px; }
   .learned-vars b { color: #a7f3d0; font-weight: 600; }
+
+  .learned-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #2f5f4d;
+    background: #0b1a15;
+    color: #d1fae5;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    resize: vertical;
+  }
+  .learned-input::placeholder { color: #4b6b5f; }
+  .learned .primary { background: #059669; border-color: #059669; }
+  .learned .primary:hover { background: #047857; }
 
   .heal {
     padding: 12px;

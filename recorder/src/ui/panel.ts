@@ -26,6 +26,8 @@ export interface PanelCallbacks {
   onToggleRecord: () => void;
   onReplay: () => void;
   onClear: () => void;
+  /** One entry per run, each holding that run's values in variable order. */
+  onRunProcess: (runs: string[][]) => void;
   /** Fired only on deliberate changes — a collapse toggle or the end of a
    *  drag — not on every pointermove. */
   onLayoutChange?: (layout: PanelLayout) => void;
@@ -59,6 +61,8 @@ export class Panel {
   private readonly learnedEl: HTMLElement;
   private readonly learnedNameEl: HTMLElement;
   private readonly learnedVarsEl: HTMLElement;
+  private readonly learnedInputEl: HTMLTextAreaElement;
+  private readonly runBtn: HTMLButtonElement;
   private readonly healEl: HTMLElement;
   private readonly healDescEl: HTMLElement;
 
@@ -96,6 +100,8 @@ export class Panel {
         <div class="learned-title">Noticed a repeated process</div>
         <div class="learned-name"></div>
         <div class="learned-vars"></div>
+        <textarea class="learned-input" rows="2" spellcheck="false"></textarea>
+        <button data-act="run" class="primary">Do the rest for me</button>
       </div>
       <div class="heal hidden">
         <div class="heal-title">Can't find this element</div>
@@ -116,12 +122,18 @@ export class Panel {
     this.learnedEl = panel.querySelector(".learned")!;
     this.learnedNameEl = panel.querySelector(".learned-name")!;
     this.learnedVarsEl = panel.querySelector(".learned-vars")!;
+    this.learnedInputEl = panel.querySelector(".learned-input")!;
+    this.runBtn = panel.querySelector('[data-act="run"]')!;
     this.healEl = panel.querySelector('.heal')!;
     this.healDescEl = panel.querySelector('.heal-desc')!;
 
     this.recordBtn.addEventListener('click', () => this.callbacks.onToggleRecord());
     this.replayBtn.addEventListener('click', () => this.callbacks.onReplay());
     this.clearBtn.addEventListener('click', () => this.callbacks.onClear());
+    this.runBtn.addEventListener('click', () => {
+      const runs = this.parseRuns();
+      if (runs.length > 0) this.callbacks.onRunProcess(runs);
+    });
 
     this.setupHeaderInteractions();
     this.setCollapsed(this.initialLayout?.collapsed ?? false);
@@ -247,6 +259,7 @@ export class Panel {
 
   setBusy(busy: boolean): void {
     this.replayBtn.disabled = busy;
+    this.runBtn.disabled = busy;
     this.clearBtn.disabled = busy;
     this.recordBtn.disabled = busy;
     this.replayBtn.textContent = busy ? 'Replaying…' : 'Replay';
@@ -344,11 +357,29 @@ export class Panel {
         this.learnedVarsEl.appendChild(line);
       }
     }
+    // The placeholder teaches the format by example rather than explaining
+    // it: the values already seen, in the order they'd need to be typed.
+    this.learnedInputEl.placeholder =
+      process.variables.length === 0
+        ? 'No inputs — one line per repeat'
+        : `${process.variables.map((v) => v.examples[v.examples.length - 1]).join(', ')}\n(one run per line)`;
+
+    this.runBtn.disabled = false;
     this.learnedEl.classList.remove('hidden');
   }
 
   hideLearned(): void {
     this.learnedEl.classList.add('hidden');
+  }
+
+  /** One run per line, values comma-separated in variable order. A single
+   *  variable — the common case — reduces to just listing the things to do
+   *  it to, one per line. */
+  private parseRuns(): string[][] {
+    return this.learnedInputEl.value
+      .split('\n')
+      .map((line) => line.split(',').map((value) => value.trim()).filter(Boolean))
+      .filter((values) => values.length > 0);
   }
 
   showHealPrompt(description: string): void {

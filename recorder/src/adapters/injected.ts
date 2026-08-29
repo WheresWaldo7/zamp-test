@@ -4,6 +4,7 @@ import type { RecordingStep } from '../core/describe/types';
 import { pickElement } from '../core/heal/elementPicker';
 import { detectRepetition } from '../core/learn/detectRepetition';
 import { generalize, type LearnedProcess } from '../core/learn/generalize';
+import { instantiateProcess } from '../core/learn/instantiate';
 import { waitForQuiescence } from '../core/replay/quiescence';
 import { replayRecording } from '../core/replay/replayRecording';
 import { buildRunLog, type RunLog } from '../core/replay/runLog';
@@ -40,6 +41,10 @@ type RecorderHandle = Recorder & {
   /** The process the recorder believes it has watched the user perform more
    *  than once, or null if nothing has repeated yet. */
   getLearnedProcess(): LearnedProcess | null;
+  /** Carries the learned process out for inputs the user never performed
+   *  themselves. Each run is one set of values, in the order the process's
+   *  variables are listed. */
+  runProcess(runs: string[][]): Promise<ReplayStepResult[][]>;
   /** Same rationale: the panel is unreachable from page scripts by design,
    *  so collapsing or repositioning it needs a sanctioned entry point. */
   panel: {
@@ -140,6 +145,9 @@ const panel = new Panel({
     recorder.clear();
     persist(recording);
     panel.render(recording);
+  },
+  onRunProcess: (runs) => {
+    void runProcess(runs);
   },
   onLayoutChange: persistPanelLayout,
 }, loadPanelLayout());
@@ -313,7 +321,63 @@ async function runReplay(steps: RecordingStep[] = recording, options: RunOptions
   }
 }
 
+/**
+ * Carries out the learned process for inputs the user never touched.
+ *
+ * Deliberately does *not* reload between runs, unlike replay. Replay reloads
+ * because it is re-performing a journey from the start; this is continuing
+ * work the user was already doing, and each run leaves a real change behind.
+ * Resetting would throw away everything the batch had just done — in this app
+ * literally, since a reload restores the seeded data.
+ *
+ * Recording is suspended for the duration, or the tool would watch itself
+ * work and learn its own output as a new process.
+ */
+async function runProcess(runs: string[][]): Promise<ReplayStepResult[][]> {
+  const process = learnedProcess;
+  if (!process || isReplaying) return [];
+
+  const wasRecording = isRecording;
+  setRecording(false);
+  isReplaying = true;
+  panel.setBusy(true);
+
+  const results: ReplayStepResult[][] = [];
+  try {
+    for (const [index, values] of runs.entries()) {
+      const steps = instantiateProcess(process, values);
+      panel.render(steps);
+      console.log(`[process] run ${index + 1}/${runs.length}: ${values.join(', ')}`);
+
+      results.push(
+        await replayRecording(steps, {
+          continueOnFailure: true,
+          stepDelayMs: DEFAULT_STEP_DELAY_MS,
+          onHeal: healHandler,
+          isOverlay: (element) => isRecorderChrome(element) || panel.owns(element),
+          onStepStart: (_step, stepIndex) => panel.setStepStatus(stepIndex, 'running'),
+          onStepResult: (result, stepIndex) => panel.applyResult(stepIndex, result, steps[stepIndex]),
+          onBeforeAction: async (element) => {
+            highlighter.show(element);
+            await sleep(HIGHLIGHT_LEAD_MS);
+          },
+        }),
+      );
+    }
+  } finally {
+    highlighter.hide();
+    panel.setBusy(false);
+    isReplaying = false;
+    if (wasRecording) setRecording(true);
+  }
+
+  const failed = results.flat().filter((r) => r.status === 'failed').length;
+  console.log(`[process] ${runs.length} run(s) complete — ${failed} failed step(s)`);
+  return results;
+}
+
 recorder.replay = (steps = recording, options) => runReplay(steps, options);
+recorder.runProcess = runProcess;
 recorder.startRecording = () => setRecording(true);
 recorder.stopRecording = () => setRecording(false);
 recorder.isRecording = () => isRecording;
