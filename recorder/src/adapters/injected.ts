@@ -2,6 +2,8 @@ import { Recorder } from '../core/recorder';
 import { describeStep } from '../core/describe/describeRecording';
 import type { RecordingStep } from '../core/describe/types';
 import { pickElement } from '../core/heal/elementPicker';
+import { detectRepetition } from '../core/learn/detectRepetition';
+import { generalize, type LearnedProcess } from '../core/learn/generalize';
 import { waitForQuiescence } from '../core/replay/quiescence';
 import { replayRecording } from '../core/replay/replayRecording';
 import { buildRunLog, type RunLog } from '../core/replay/runLog';
@@ -35,6 +37,9 @@ type RecorderHandle = Recorder & {
    *  end of every run; kept here so it can be inspected or exported after
    *  the console output has scrolled away. */
   getRunLog(): RunLog | null;
+  /** The process the recorder believes it has watched the user perform more
+   *  than once, or null if nothing has repeated yet. */
+  getLearnedProcess(): LearnedProcess | null;
   /** Same rationale: the panel is unreachable from page scripts by design,
    *  so collapsing or repositioning it needs a sanctioned entry point. */
   panel: {
@@ -162,7 +167,30 @@ recorder.onStep = (step) => {
   recording.push(describeStep(step));
   persist(recording);
   panel.render(recording);
+  noticeRepetition();
 };
+
+/**
+ * Re-runs detection after every captured step. This is the "watching" half of
+ * the brief: nobody asks for it, and the user is told what has been noticed
+ * rather than being asked to declare it up front.
+ *
+ * Cheap enough to do eagerly — the scan is over a session's worth of steps,
+ * and doing it live is what lets the offer arrive while the work is still in
+ * front of the user, which is the only moment it is worth anything.
+ */
+function noticeRepetition(): void {
+  const pattern = detectRepetition(recording);
+  const next = pattern ? generalize(pattern) : null;
+
+  const changed = next?.occurrences !== learnedProcess?.occurrences || next?.name !== learnedProcess?.name;
+  learnedProcess = next;
+  if (next && changed) {
+    panel.showLearned(next);
+    console.log(`[learn] noticed "${next.name}" ×${next.occurrences}`, next);
+  }
+  if (!next) panel.hideLearned();
+}
 recorder.getRecording = () => recording;
 
 // Recorder.clear() only knows about its own Stage 1 state — it has no idea
@@ -185,6 +213,7 @@ recorder.clear = () => {
  * doesn't get captured as a new step in the very recording being repaired.
  */
 let lastRunLog: RunLog | null = null;
+let learnedProcess: LearnedProcess | null = null;
 
 /** Printed rather than merely returned, because the most useful moment to
  *  see a run explained is immediately after watching it. */
@@ -289,6 +318,7 @@ recorder.startRecording = () => setRecording(true);
 recorder.stopRecording = () => setRecording(false);
 recorder.isRecording = () => isRecording;
 recorder.getRunLog = () => lastRunLog;
+recorder.getLearnedProcess = () => learnedProcess;
 recorder.panel = {
   collapse: (collapsed) => {
     panel.setCollapsed(collapsed);

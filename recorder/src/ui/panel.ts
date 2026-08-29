@@ -56,6 +56,9 @@ export class Panel {
   private readonly recordBtn: HTMLButtonElement;
   private readonly replayBtn: HTMLButtonElement;
   private readonly clearBtn: HTMLButtonElement;
+  private readonly learnedEl: HTMLElement;
+  private readonly learnedNameEl: HTMLElement;
+  private readonly learnedVarsEl: HTMLElement;
   private readonly healEl: HTMLElement;
   private readonly healDescEl: HTMLElement;
 
@@ -89,6 +92,11 @@ export class Panel {
       </div>
       <div class="steps"></div>
       <div class="empty">Nothing recorded yet.<br />Press Record and use the app.</div>
+      <div class="learned hidden">
+        <div class="learned-title">Noticed a repeated process</div>
+        <div class="learned-name"></div>
+        <div class="learned-vars"></div>
+      </div>
       <div class="heal hidden">
         <div class="heal-title">Can't find this element</div>
         <div class="heal-desc"></div>
@@ -105,6 +113,9 @@ export class Panel {
     this.recordBtn = panel.querySelector('[data-act="record"]')!;
     this.replayBtn = panel.querySelector('[data-act="replay"]')!;
     this.clearBtn = panel.querySelector('[data-act="clear"]')!;
+    this.learnedEl = panel.querySelector(".learned")!;
+    this.learnedNameEl = panel.querySelector(".learned-name")!;
+    this.learnedVarsEl = panel.querySelector(".learned-vars")!;
     this.healEl = panel.querySelector('.heal')!;
     this.healDescEl = panel.querySelector('.heal-desc')!;
 
@@ -309,6 +320,35 @@ export class Panel {
     } else {
       row.error.classList.add('hidden');
     }
+  }
+
+  /** Announces what the recorder worked out on its own. Shows the examples it
+   *  learned from, because "you did this 3 times" is a claim the user should
+   *  be able to check rather than take on trust. */
+  showLearned(process: {
+    name: string;
+    occurrences: number;
+    variables: { name: string; examples: string[] }[];
+  }): void {
+    this.learnedNameEl.textContent = `${process.name} — done ${process.occurrences}×`;
+
+    this.learnedVarsEl.textContent = '';
+    if (process.variables.length === 0) {
+      this.learnedVarsEl.textContent = 'Identical every time — no inputs vary.';
+    } else {
+      for (const variable of process.variables) {
+        const line = document.createElement('div');
+        const label = document.createElement('b');
+        label.textContent = variable.name;
+        line.append(label, document.createTextNode(`: ${variable.examples.join(', ')}`));
+        this.learnedVarsEl.appendChild(line);
+      }
+    }
+    this.learnedEl.classList.remove('hidden');
+  }
+
+  hideLearned(): void {
+    this.learnedEl.classList.add('hidden');
   }
 
   showHealPrompt(description: string): void {

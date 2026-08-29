@@ -1,16 +1,21 @@
 # A recorder that watches, learns, and replays
 
-Record a flow through a web app once. Replay it later — against a version of
-that app whose class names have all changed, whose DOM has been reorganised,
-and whose buttons have moved — and have most of it still work. When a step
-genuinely can't be resolved any more, stop and ask a human which element was
-meant, learn the answer, and carry on.
+**Learn a user's process by watching them, then automate it on their behalf.**
+
+Nobody presses a button to say "this is a process". The recorder watches, and
+when the same shape of work happens more than once it says so — along with
+which parts of it were different each time, because those are the inputs.
+
+The process it learns then replays against a version of the app whose class
+names have all changed, whose DOM has been reorganised, and whose buttons have
+moved. When a step genuinely can't be resolved any more, it stops and asks a
+human which element was meant, learns the answer, and carries on.
 
 Two packages, one repo:
 
 - **`app/`** — the "victim": a fake order console, built deliberately hostile
   to automation.
-- **`recorder/`** — the recorder itself: capture, describe, replay, heal.
+- **`recorder/`** — the recorder itself: capture, describe, learn, replay, heal.
 
 [DECISIONS.md](DECISIONS.md) covers the choices that had a real alternative,
 and what each one cost.
@@ -50,15 +55,14 @@ window.__recorder.replay(steps, { reload: false, stepDelayMs: 0 })
 
 ## The shape of the thing
 
-Four stages, and one artifact passed between them.
-
 ```
-  CAPTURE  ──▶  DESCRIBE  ──▶  REPLAY  ──▶  HEAL
-  listen to     turn each      find it      when you can't,
-  the user      action into    again, and   ask the human
-  without       N ways to      wait until   and remember
-  breaking      find that      it's really  the answer
-  anything      element        ready
+  CAPTURE  ──▶  DESCRIBE  ──▶  LEARN  ──▶  REPLAY  ──▶  HEAL
+  listen to     turn each      notice a    find it      when you can't,
+  the user      action into    repeated    again, and   ask the human
+  without       N ways to      shape and   wait until   and remember
+  breaking      find that      what it     it's really  the answer
+  anything      element        takes as    ready
+                               input
 ```
 
 The artifact is a `Recording`: a JSON array of steps, each holding ranked
@@ -84,7 +88,65 @@ Everything either produces this object or consumes it.
 
 ---
 
-## 1. Why deterministic replay, in the agent era
+## 1. Learning a process by watching
+
+Detection runs after every captured step. Nobody declares a process; doing the
+same thing twice is the declaration.
+
+The mechanism is a **step signature** — the shape of a step with everything
+instance-specific stripped out. Two runs of "mark an order processed" touch
+different rows and may set different values, so comparing steps by their
+selectors would say every run was unrelated. Comparing them by shape says they
+are the same procedure.
+
+What the signature keeps, in order of preference:
+
+| Kept | Why it generalises |
+|---|---|
+| Role — `combobox[name="Status"]` | Identical on every run |
+| Class or id — `._cellMuted_11v6d_52` | Shared by *every* row's id cell, so it generalises across rows precisely because it is generic |
+| Structure with indices stripped | `div:nth-of-type(7) > span` and `div:nth-of-type(12) > span` are the same cell in different rows |
+
+Visible text is deliberately never used. It is the most instance-specific
+thing on an element — which makes it the best selector for replaying one step
+and the worst descriptor for recognising a repeated one. That inversion is the
+crux: **replay wants what is unique, learning wants what is shared.**
+
+Scrolling, hovering and focus are excluded from matching. People scroll to find
+a row and tab between fields differently on every repetition, so leaving them
+in would make two runs of the same process look different.
+
+### Detection and parameterisation are one computation
+
+Comparing the runs tells you both that a shape recurred *and* which parts of it
+differed. Anything identical across every run is part of the procedure;
+anything that varied is an input to it.
+
+Watching someone process three orders by hand produces:
+
+```
+Noticed a repeated process — done 3×
+  Set the combobox labelled "Status" to "processing"
+  ORD… (target): ORD-1000, ORD-1001, ORD-1002
+```
+
+The status was the same every time, so it belongs to the procedure. The order
+was not, so it became an input — named from the shape of the data rather than
+by position, and trimmed of trailing digits so the name doesn't drift as more
+examples arrive.
+
+Do the same three orders with three *different* statuses and it finds two
+inputs instead of one, without being told anything had changed.
+
+Only consecutive repetition counts. Someone grinding through a queue does the
+work back to back, and requiring that is what stops unrelated actions that
+merely recur across a session from being mistaken for a procedure. A single
+step repeated is also ignored — that is someone browsing, not a process worth
+offering to take over.
+
+---
+
+## 2. Why deterministic replay, in the agent era
 
 The obvious question is why any of this matters when a model can look at a
 page and decide what to click.
@@ -116,7 +178,7 @@ answers the question when replay stops and asks which element moved.
 
 ---
 
-## 2. The selector scoring function
+## 3. The selector scoring function
 
 For every captured element, generate every reasonable way to find it again,
 then rank them. Store the top 3.
@@ -173,7 +235,7 @@ have saved it — which is exactly why healing exists.
 
 ---
 
-## 3. Record intent, not mechanics
+## 4. Record intent, not mechanics
 
 A recorder that captures mechanics is a video. A recorder that captures intent
 is a program. This single idea is what makes the hard interactions tractable.
@@ -228,7 +290,7 @@ sitting on top of v2's relocated Save button.
 
 ---
 
-## 4. What I cut, and why
+## 5. What I cut, and why
 
 Each of these is a decision with a reason, not a gap.
 
@@ -349,6 +411,10 @@ recorder/src/
       strategies.ts        the five strategies; describe() doubles as match()
       describeElement.ts   the scoring function
       describeRecording.ts CapturedStep[] -> RecordingStep[]
+    learn/
+      signature.ts         a step's shape, with the instance stripped out
+      detectRepetition.ts  the strongest consecutive repeat in what was done
+      generalize.ts        occurrences -> a process plus what varies
     replay/
       findTarget.ts        candidate fallthrough, virtualization scroll-retry
       actionability.ts     visible / stable / enabled / hittable polling
@@ -407,13 +473,18 @@ dominate a total that is supposed to describe the system.
 npm install && npm test
 ```
 
-Ten Playwright tests, run in CI on every push. Playwright is the *harness*,
-not the delivery mechanism — the recorder still runs as an injected page
-script driving the DOM with untrusted events, and Playwright only opens the
-browser and reads results back out.
+Fifteen Playwright tests, run in CI on every push. Playwright is the
+*harness*, not the delivery mechanism — the recorder still runs as an injected
+page script driving the DOM with untrusted events, and Playwright only opens
+the browser and reads results back out.
 
 The suite pins both halves of the thesis:
 
+- **Learning happens by watching.** One pass teaches it nothing; two passes
+  produce a process; three passes with a varying status produce two inputs
+  instead of one. Opening three orders without doing anything to them is
+  correctly ignored, because a single repeated step is browsing rather than a
+  procedure.
 - **v1 replays clean**, and does so repeatably across consecutive runs.
 - **v2** — every class renamed, rows nested deeper, Save button moved — a flow
   recorded against *meaning* survives untouched, while a step recorded against
@@ -433,11 +504,21 @@ still found after moving to a new parent".
 
 ## Status
 
-Stages 0–5 are complete: the victim app, capture, describe, replay, healing,
-the v1→v2 demonstration, the run log, and CI.
+Working end to end: watching, learning a process and its inputs, replaying it,
+surviving a refactor, asking for help when it genuinely can't, and explaining
+what it did.
 
-The one item from the plan left undone is parameterisation — record the same
-flow twice with different values, diff the recordings, and mark the differing
-fields as variables. It is the piece that would turn a recording into a
-reusable template rather than a fixed script, and it is roughly sixty lines
-against the existing `Recording` shape.
+**What isn't built: executing a learned process across new inputs.** The tool
+works out that you processed `ORD-1000`, `ORD-1001` and `ORD-1002`, and that
+the order is the input — but it can't yet be handed `ORD-1003, ORD-1004` and
+told to carry on. That is the second half of "automate it on their behalf",
+and it needs two things: substituting a variable's value into a step's
+candidates, and running the template once per input.
+
+The related ceiling is that a process still can't be pointed at a *query*
+rather than a list. "Take the top ten pending" needs the target set
+re-evaluated as it changes — an order stops matching a pending filter the
+moment you process it — and steps capture identity (*the element reading
+ORD-1006*) rather than a query (*whatever is first right now*). See
+[DECISIONS.md](DECISIONS.md) for why loops and conditionals were cut, and what
+that costs.

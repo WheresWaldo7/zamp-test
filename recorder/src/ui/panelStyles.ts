@@ -119,6 +119,19 @@ export const PANEL_STYLES = `
   .status[data-status="skipped"] { background: #2b2937; color: #a5a1b8; }
   .status[data-status="failed"] { background: #7f1d1d; color: #fca5a5; }
 
+  /* Deliberately the loudest thing in the panel: it is the one part that
+     speaks without being asked. */
+  .learned {
+    padding: 12px;
+    border-top: 1px solid #2e2c3a;
+    background: #10231c;
+    border-left: 3px solid #10b981;
+  }
+  .learned-title { font-weight: 600; color: #6ee7b7; margin-bottom: 4px; }
+  .learned-name { color: #d1fae5; line-height: 1.4; margin-bottom: 8px; }
+  .learned-vars { color: #8f8aa3; font-size: 10px; line-height: 1.5; margin-bottom: 10px; }
+  .learned-vars b { color: #a7f3d0; font-weight: 600; }
+
   .heal {
     padding: 12px;
     border-top: 1px solid #2e2c3a;
