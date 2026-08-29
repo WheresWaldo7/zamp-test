@@ -4,6 +4,7 @@ import type { RecordingStep } from '../core/describe/types';
 import { pickElement } from '../core/heal/elementPicker';
 import { waitForQuiescence } from '../core/replay/quiescence';
 import { replayRecording } from '../core/replay/replayRecording';
+import { buildRunLog, type RunLog } from '../core/replay/runLog';
 import type { ReplayOptions, ReplayStepResult } from '../core/replay/types';
 import { Highlighter } from '../ui/highlight';
 import { Panel, type PanelLayout } from '../ui/panel';
@@ -30,6 +31,10 @@ type RecorderHandle = Recorder & {
   startRecording(): void;
   stopRecording(): void;
   isRecording(): boolean;
+  /** The last run, as a table plus a summary. Printed automatically at the
+   *  end of every run; kept here so it can be inspected or exported after
+   *  the console output has scrolled away. */
+  getRunLog(): RunLog | null;
   /** Same rationale: the panel is unreachable from page scripts by design,
    *  so collapsing or repositioning it needs a sanctioned entry point. */
   panel: {
@@ -179,6 +184,34 @@ recorder.clear = () => {
  * Recording is suspended while the human points, so their diagnostic click
  * doesn't get captured as a new step in the very recording being repaired.
  */
+let lastRunLog: RunLog | null = null;
+
+/** Printed rather than merely returned, because the most useful moment to
+ *  see a run explained is immediately after watching it. */
+function printRunLog(log: RunLog): void {
+  const { summary } = log;
+  const headline =
+    `[replay] ${summary.steps} steps in ${summary.totalMs}ms — ` +
+    `${summary.done} done, ${summary.healed} healed, ${summary.skipped} skipped, ${summary.failed} failed`;
+
+  // `??` would be wrong here: console.groupCollapsed returns undefined even
+  // when it exists, so the fallback would always fire and print twice.
+  const grouped = typeof console.groupCollapsed === 'function';
+  if (grouped) console.groupCollapsed(headline);
+  else console.log(headline);
+
+  if (typeof console.table === 'function') console.table(log.rows);
+  else console.log(log.rows);
+  if (summary.fellThrough > 0) {
+    console.log(
+      `[replay] ${summary.fellThrough} step(s) resolved through a fallback candidate — ` +
+        'still green, but those are the ones a refactor will break first.',
+    );
+  }
+  if (summary.healMs > 0) console.log(`[replay] ${summary.healMs}ms of that was waiting for a human.`);
+  if (grouped) console.groupEnd();
+}
+
 const healHandler: NonNullable<ReplayOptions['onHeal']> = async (request) => {
   panel.showHealPrompt(request.description);
   try {
@@ -220,7 +253,7 @@ async function runReplay(steps: RecordingStep[] = recording, options: RunOptions
   const stepDelay = options.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
 
   try {
-    return await replayRecording(steps, {
+    const results = await replayRecording(steps, {
       continueOnFailure: true,
       stepDelayMs: stepDelay,
       onHeal: healHandler,
@@ -237,6 +270,10 @@ async function runReplay(steps: RecordingStep[] = recording, options: RunOptions
       },
       ...options,
     });
+
+    lastRunLog = buildRunLog(steps, results);
+    printRunLog(lastRunLog);
+    return results;
   } finally {
     highlighter.hide();
     // Healing rewrites steps in place, so a run that needed a human is only
@@ -251,6 +288,7 @@ recorder.replay = (steps = recording, options) => runReplay(steps, options);
 recorder.startRecording = () => setRecording(true);
 recorder.stopRecording = () => setRecording(false);
 recorder.isRecording = () => isRecording;
+recorder.getRunLog = () => lastRunLog;
 recorder.panel = {
   collapse: (collapsed) => {
     panel.setCollapsed(collapsed);

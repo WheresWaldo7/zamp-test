@@ -42,16 +42,19 @@ function descendToRoot(target: DescribedTarget): ParentNode | null {
 export interface FoundTarget {
   element: Element;
   candidate: SelectorCandidate;
+  /** Rank of the winning candidate. 0 is the top choice; higher means the
+   *  fallthrough was needed, which is worth logging rather than hiding. */
+  candidateIndex: number;
 }
 
 /** Tries each candidate best-first; a candidate that misses or now matches
  *  more than one element is skipped rather than trusted, since Stage 2 only
  *  guaranteed it was unique at *capture* time. */
 function tryFindInRoot(root: ParentNode, candidates: SelectorCandidate[]): FoundTarget | null {
-  for (const candidate of candidates) {
+  for (const [candidateIndex, candidate] of candidates.entries()) {
     const strategy = STRATEGY_BY_KIND[candidate.kind];
     const matches = findByStrategy(strategy, root, candidate.value);
-    if (matches.length === 1) return { element: matches[0], candidate };
+    if (matches.length === 1) return { element: matches[0], candidate, candidateIndex };
   }
   return null;
 }

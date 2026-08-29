@@ -362,12 +362,79 @@ recorder/src/
 
 ---
 
+## Observability
+
+Every run prints a table and a summary, and the last one stays available as
+`window.__recorder.getRunLog()`.
+
+```
+[replay] 4 steps in 43ms — 4 done, 0 healed, 0 skipped, 0 failed
+  1. done | text  #0 (70)  | 3ms  | Click the element reading "ORD-1006"
+  2. done | role  #0 (100) | 11ms | Set the combobox labelled "Status" to "shipped"
+  3. done | struct #2 (15) | 15ms | Click the element reading "☆" (inside <x-rating>)
+  4. done | role  #0 (100) | 14ms | Click the button labelled "Save order"
+[replay] 1 step(s) resolved through a fallback candidate — still green, but
+         those are the ones a refactor will break first.
+```
+
+Two things in there are worth more than the pass/fail count.
+
+**The `#n` is the candidate's rank.** `#0` means the top-ranked candidate won;
+anything higher means the fallthrough saved it. A green run where half the
+steps resolved via `#2` is a recording one refactor away from stopping to ask
+for help, and nothing in a pass/fail count would tell you that.
+
+**Timings are split by phase, not totalled**, because the useful question is
+*which* phase was slow. A long `findMs` means candidates missed and the scroll
+probe ran; a long `actionableMs` means the app was still settling or something
+was covering the target. That distinction diagnosed a real failure during
+development: a step reporting `findMs: 1, actionableMs: 3043` had found its
+button instantly and then been blocked for three seconds — which pointed
+straight at the cookie banner overlapping it at a narrow viewport, rather than
+at anything to do with selectors.
+
+Human time spent re-pointing is tracked separately, since it would otherwise
+dominate a total that is supposed to describe the system.
+
+---
+
+## Tests
+
+```bash
+npm install && npm test
+```
+
+Ten Playwright tests, run in CI on every push. Playwright is the *harness*,
+not the delivery mechanism — the recorder still runs as an injected page
+script driving the DOM with untrusted events, and Playwright only opens the
+browser and reads results back out.
+
+The suite pins both halves of the thesis:
+
+- **v1 replays clean**, and does so repeatably across consecutive runs.
+- **v2** — every class renamed, rows nested deeper, Save button moved — a flow
+  recorded against *meaning* survives untouched, while a step recorded against
+  nothing but a generated class name and a position needs exactly one
+  re-point, and stays healed afterwards.
+
+Both row-click behaviours are covered deliberately: clicking the order-id cell
+yields durable text identity, clicking the row's own padding yields none.
+Testing only the first would overstate how well this works; only the second
+would understate it.
+
+The suite is load-bearing rather than decorative. Demoting the role strategy's
+base weight from 100 to 10 fails four tests, including "the Save button is
+still found after moving to a new parent".
+
+---
+
 ## Status
 
-Stages 0–4 are complete: the victim app, capture, describe, replay, and
-healing, with the v1→v2 demonstration working end to end.
+Stages 0–5 are complete: the victim app, capture, describe, replay, healing,
+the v1→v2 demonstration, the run log, and CI.
 
-Still open, in order of value: a run log with per-step timings, CI tests
-pinning "v1 replays clean" and "v2 needs exactly one re-point", and
-parameterisation (record the same flow twice, diff the recordings, mark the
-differing fields as variables).
+The one item from the plan left undone is parameterisation — record the same
+flow twice with different values, diff the recordings, and mark the differing
+fields as variables. It is the piece that would turn a recording into a
+reusable template rather than a fixed script, and it is roughly sixty lines
+against the existing `Recording` shape.

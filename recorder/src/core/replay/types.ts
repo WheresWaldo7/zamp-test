@@ -2,12 +2,31 @@ import type { RecordingStep, SelectorCandidate } from '../describe/types';
 
 export type ReplayStatus = 'done' | 'healed' | 'skipped' | 'failed';
 
+/** Where the time in a step actually went. Separated rather than totalled
+ *  because the interesting question is *which* phase was slow: a long
+ *  `findMs` means candidates are missing and the scroll probe ran, a long
+ *  `actionableMs` means the app was still settling, and `healMs` is a human
+ *  thinking and so says nothing about the system at all. */
+export interface StepTimings {
+  findMs: number;
+  healMs: number;
+  actionableMs: number;
+  actionMs: number;
+  totalMs: number;
+}
+
 export interface ReplayStepResult {
   stepId: string;
   status: ReplayStatus;
   /** Which candidate actually resolved the element — the evidence that the
    *  ranking function's ordering held up against the live DOM. */
   matchedCandidate?: SelectorCandidate;
+  /** Its position in the ranked list. 0 means the top-ranked candidate won;
+   *  anything higher is the fallthrough doing its job, and a run full of
+   *  non-zero indexes is a recording that is one refactor from needing a
+   *  human. */
+  candidateIndex?: number;
+  timings?: StepTimings;
   error?: string;
 }
 

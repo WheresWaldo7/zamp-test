@@ -294,7 +294,11 @@ export class Panel {
 
     if (result.matchedCandidate) {
       const { kind, value, score } = result.matchedCandidate;
-      row.meta.textContent = `matched via ${kind} · ${value} (${score})`;
+      // The candidate's rank matters as much as which one won: `#0` means the
+      // best guess held, anything higher means the fallthrough saved it.
+      const rank = `#${result.candidateIndex ?? 0}`;
+      const took = result.timings ? ` · ${Math.round(result.timings.totalMs)}ms` : '';
+      row.meta.textContent = `${kind} ${rank} · ${value} (${score})${took}`;
     }
     if (result.status === 'healed') {
       row.root.querySelector('.desc')!.textContent = describeStepForHuman(step.action, step.target);
