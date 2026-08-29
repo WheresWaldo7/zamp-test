@@ -335,3 +335,21 @@ test('a failed lookup leaves the page where it found it', async ({ page }) => {
 
   expect(after).toEqual(before);
 });
+
+test('typing, backspacing, and typing again is not a two-input process', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  const box = page.locator('input[placeholder*="Filter"]');
+  for (const value of ['abc', '', 'def', 'de']) {
+    await box.fill(value);
+    await page.waitForTimeout(700); // let the input debounce settle
+  }
+
+  // Four steps that all look alike to the detector. A uniform run matches a
+  // pattern of every length up to half its own, so this got read as "two
+  // steps, done twice" — a process wanting two search terms, when what
+  // happened was one person using one search box. Handing it two values then
+  // typed the second one into the same box, so the first search never ran.
+  expect(await learned(page)).toBeNull();
+});

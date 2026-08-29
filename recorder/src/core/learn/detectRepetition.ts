@@ -58,6 +58,16 @@ export function detectRepetition(steps: RecordingStep[]): DetectedPattern | null
     for (let length = MIN_PATTERN_LENGTH; length <= maxLength; length++) {
       if (length === 1 && !worthAutomatingAlone(candidates[start])) continue;
 
+      // A stretch of identical steps has no shape of its own, and it matches
+      // a pattern of every length up to half its own. Someone typing in a
+      // search box, backspacing, and typing again produces four steps that
+      // look alike; read as "two steps, done twice" that becomes a process
+      // asking for two search terms, when what happened was one person
+      // using one search box. The only honest reading of a uniform run is a
+      // single step repeated, which is handled above — and allowed only for
+      // an action that is a whole unit of work on its own.
+      if (length > 1 && isUniform(signatures, start, length)) continue;
+
       let count = 1;
       while (matchesAt(signatures, start, start + count * length, length)) count++;
       if (count < MIN_OCCURRENCES) continue;
@@ -129,6 +139,15 @@ function alignToInstanceStep(
     }
   }
   return best;
+}
+
+/** Whether every step in the window describes the same action on the same
+ *  thing — a run with no internal structure to be a procedure. */
+function isUniform(signatures: string[], start: number, length: number): boolean {
+  for (let i = 1; i < length; i++) {
+    if (signatures[start + i] !== signatures[start]) return false;
+  }
+  return true;
 }
 
 function matchesAt(signatures: string[], from: number, at: number, length: number): boolean {
