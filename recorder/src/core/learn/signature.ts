@@ -74,10 +74,22 @@ export function meaningfulSteps(steps: RecordingStep[]): RecordingStep[] {
   return steps.filter((step) => !isIncidental(step));
 }
 
-/** The text a step was performed against, if it has one. This is the part
- *  that differs between runs of the same process, which makes it both the
- *  process's input and the marker for where a cycle begins. */
+/**
+ * What a step was performed against, if that can be named. This is the part
+ * that differs between runs of the same process, which makes it both the
+ * process's input and the marker for where a cycle begins.
+ *
+ * The row's identity wins over the clicked element's own text, because a
+ * person aiming at a row does not aim at the same cell twice. Clicking the
+ * total on one pass and the status on the next makes the element texts
+ * "$317.60" and "cancelled" — two values that name nothing anyone could ask
+ * for. The row those cells belong to is the thing being chosen, and its id is
+ * what the user would type.
+ */
 export function targetText(step: RecordingStep): string | null {
+  const scope = step.target?.scope;
+  if (scope) return scope.text;
+
   const text = step.target?.candidates.find((c) => c.kind === 'text');
   return text ? text.value.replace(/^text:"|"$/g, '') : null;
 }

@@ -39,7 +39,21 @@ function applyVariable(step: RecordingStep, variable: ProcessVariable, value: st
   }
 
   if (!step.target) return step;
-  return { ...step, target: { ...step.target, candidates: retarget(step.target.candidates, from, value) } };
+
+  const candidates = retarget(step.target.candidates, from, value);
+
+  // When the step was recorded inside a list, re-pointing is not a string
+  // substitution at all — it is naming a different row. The candidates
+  // describe a cell of the row that was recorded, and which cell that was is
+  // an accident of where the user's cursor landed; the row is the thing being
+  // chosen. Moving the scope moves the search, so the same cell of the right
+  // row is found even when nothing about the recorded cell mentions the id.
+  const scope = step.target.scope;
+  if (scope) {
+    return { ...step, target: { ...step.target, scope: { ...scope, text: value }, candidates } };
+  }
+
+  return { ...step, target: { ...step.target, candidates } };
 }
 
 /**

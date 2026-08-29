@@ -44,9 +44,17 @@ export function detectRepetition(steps: RecordingStep[]): DetectedPattern | null
       // Between a short shape repeated many times and a longer one repeated
       // fewer, coverage is the honest tiebreak: it is the amount of work the
       // user would not have to do again.
+      //
+      // When coverage ties, take the *shorter* pattern. Four passes of a
+      // three-step cycle cover twelve steps either way: as three steps done
+      // four times, or as six steps done twice. Both describe the recording
+      // perfectly, but only the first describes the process. Choosing the
+      // longer one teaches the tool that "the process" is two orders' worth
+      // of work, so asking it to do one order does two — and the second is
+      // an order the user never named.
       const coverage = length * count;
       const bestCoverage = best ? best.length * best.count : 0;
-      if (coverage > bestCoverage || (coverage === bestCoverage && best && length > best.length)) {
+      if (coverage > bestCoverage || (coverage === bestCoverage && best && length < best.length)) {
         best = { start, length, count };
       }
     }

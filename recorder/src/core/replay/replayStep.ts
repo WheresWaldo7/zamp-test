@@ -94,7 +94,12 @@ export async function replayStep(step: RecordingStep, options: ReplayOptions = {
     return {
       stepId: step.id,
       status: 'failed',
-      error: 'no candidate resolved to a unique element',
+      // A scoped step failed for a reason the user can act on: the thing they
+      // named isn't on the page. Saying "no candidate resolved" sends them
+      // hunting through selectors for what is really a typo.
+      error: step.target.scope
+        ? `no row matching "${step.target.scope.text}"`
+        : 'no candidate resolved to a unique element',
       timings,
     };
   }

@@ -1,5 +1,6 @@
 import type { CapturedAction, CapturedStep, CapturedTarget } from '../types';
 import { describeElement } from './describeElement';
+import { describeScope } from './scope';
 import type { DescribedTarget, RecordingAction, RecordingStep } from './types';
 
 export function describeTarget(target: CapturedTarget): DescribedTarget {
@@ -7,6 +8,7 @@ export function describeTarget(target: CapturedTarget): DescribedTarget {
     candidates: describeElement(target.element),
     frame: target.frame,
     shadowPath: target.shadowPath,
+    scope: describeScope(target.element),
   };
 }
 

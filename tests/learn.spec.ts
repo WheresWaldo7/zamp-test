@@ -307,3 +307,57 @@ test('runs the process against a filtered list that shrinks as it goes', async (
   expect(await statusOf(page, visible[2]!)).toBeNull();
   expect(await statusOf(page, visible[3]!)).toBeNull();
 });
+
+test('learns one pass of the cycle, not two of them glued together', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  for (const id of ['ORD-1000', 'ORD-1001', 'ORD-1002', 'ORD-1003']) {
+    await processOrder(page, id, 'processing');
+  }
+
+  // Four passes of a three-step cycle cover twelve steps two ways: three
+  // steps done four times, or six steps done twice. Both fit the recording;
+  // only one is the process. Reading it as six means one input does two
+  // orders — and the second is one the user never named.
+  const process = (await learned(page))!;
+  expect(process.steps).toHaveLength(3);
+  expect(process.occurrences).toBe(4);
+
+  // One input, one order. Reading the cycle as six steps processed the row
+  // below as well.
+  await runProcess(page, [['ORD-1050']]);
+  expect(await statusOf(page, 'ORD-1050')).toBe('processing');
+  expect(await statusOf(page, 'ORD-1051')).not.toBe('processing');
+});
+
+test('takes the input from the row, not the cell the user happened to click', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // Nobody aims at the same cell twice. Here one pass lands on the total and
+  // the next on the status, so the clicked elements read "$317.60" and
+  // "cancelled" — two texts that name nothing anyone could ask for. What was
+  // being chosen both times is the row.
+  for (const [row, column] of [[0, 4], [1, 5]] as const) {
+    await page.evaluate(([row, column]) => {
+      const cells = document.querySelectorAll('[class*="_row_"]')[row].querySelectorAll('span');
+      (cells[Math.min(column, cells.length - 1)] as HTMLElement).click();
+    }, [row, column]);
+    await page.locator('#order-status').selectOption('processing');
+    await page.getByRole('button', { name: 'Save order' }).click();
+  }
+
+  const process = (await learned(page))!;
+  const [variable] = process.variables;
+  expect(variable.kind).toBe('target');
+  expect(variable.name).toBe('ORD…');
+  expect(variable.examples).toEqual(['ORD-1000', 'ORD-1001']);
+
+  // And the order id is enough to run it, even though no recorded candidate
+  // ever mentioned one.
+  const results = await runProcess(page, [['ORD-1044']]);
+  expect(results.flat().map((step) => step.status)).not.toContain('failed');
+  expect(await statusOf(page, 'ORD-1044')).toBe('processing');
+  expect(await statusOf(page, 'ORD-1050')).not.toBe('processing');
+});

@@ -6,10 +6,25 @@ export interface SelectorCandidate {
   score: number;
 }
 
+/** The repeated unit a target sits inside — a table row, a card, a list
+ *  item — and how to tell this one from the others. Present only when the
+ *  element really is inside a list of same-shaped siblings. */
+export interface TargetScope {
+  /** Selector matching every unit in the list. */
+  container: string;
+  /** Text that appears in exactly one unit, so it names this one. */
+  text: string;
+  /** The target's position among the unit's descendants, used when nothing
+   *  about the element itself distinguishes it from the same cell in a
+   *  different unit. */
+  index: number;
+}
+
 export interface DescribedTarget {
   candidates: SelectorCandidate[];
   frame: string[];
   shadowPath: string[];
+  scope?: TargetScope;
 }
 
 export type RecordingAction =
