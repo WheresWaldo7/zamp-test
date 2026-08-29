@@ -1,5 +1,6 @@
 import type { RecordingStep } from '../describe/types';
 import { describeStepForHuman } from '../heal/describeForHuman';
+import { targetText } from './signature';
 import type { DetectedPattern } from './detectRepetition';
 
 export interface ProcessVariable {
@@ -24,12 +25,6 @@ export interface LearnedProcess {
 
 /** The text a step was performed against, if it has one — the part that
  *  differs between runs of the same process. */
-function targetText(step: RecordingStep): string | null {
-  const text = step.target?.candidates.find((c) => c.kind === 'text');
-  if (!text) return null;
-  return text.value.replace(/^text:"|"$/g, '');
-}
-
 function actionValue(step: RecordingStep): string | null {
   const action = step.action;
   return action.type === 'input' || action.type === 'change' ? action.value : null;

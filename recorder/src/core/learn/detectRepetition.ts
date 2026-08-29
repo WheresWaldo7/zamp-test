@@ -1,5 +1,5 @@
 import type { RecordingStep } from '../describe/types';
-import { meaningfulSteps, stepSignature } from './signature';
+import { meaningfulSteps, stepSignature, targetText } from './signature';
 
 /** How many times a shape must recur before it counts as a process rather
  *  than a coincidence. Two is a pair; three is a habit. */
@@ -54,16 +54,51 @@ export function detectRepetition(steps: RecordingStep[]): DetectedPattern | null
 
   if (!best) return null;
 
+  const aligned = alignToInstanceStep(candidates, best);
+
   const occurrences: RecordingStep[][] = [];
-  for (let i = 0; i < best.count; i++) {
-    const from = best.start + i * best.length;
-    occurrences.push(candidates.slice(from, from + best.length));
+  for (let i = 0; i < aligned.count; i++) {
+    const from = aligned.start + i * aligned.length;
+    occurrences.push(candidates.slice(from, from + aligned.length));
   }
 
   return {
     signature: signatures.slice(best.start, best.start + best.length),
     occurrences,
   };
+}
+
+/**
+ * Rotates the detected cycle so it begins with the step that says *which*
+ * thing the run is about.
+ *
+ * A repeat of A-B-C is structurally indistinguishable from a repeat of
+ * B-C-A, and if the recording happened to start mid-cycle — the user opened
+ * an order and only then pressed Record — the second is what gets found. That
+ * version is not merely untidy: it means "set the status, save, then open the
+ * next order", so the very first run edits whatever happened to be on screen
+ * and the user's chosen input is only opened at the end. It quietly modifies
+ * something nobody asked it to.
+ *
+ * The step whose target text differs between occurrences is the one that
+ * picks the instance, so a cycle that starts there reads the way the work
+ * actually goes: choose the thing, then act on it.
+ */
+function alignToInstanceStep(
+  candidates: RecordingStep[],
+  best: { start: number; length: number; count: number },
+): { start: number; length: number; count: number } {
+  for (let rotation = 0; rotation < best.length; rotation++) {
+    const start = best.start + rotation;
+    const count = Math.floor((candidates.length - start) / best.length);
+    if (count < MIN_OCCURRENCES) continue;
+
+    const texts = Array.from({ length: count }, (_, i) => targetText(candidates[start + i * best.length]));
+    if (texts[0] !== null && new Set(texts).size > 1) {
+      return { start, length: best.length, count };
+    }
+  }
+  return best;
 }
 
 function matchesAt(signatures: string[], from: number, at: number, length: number): boolean {

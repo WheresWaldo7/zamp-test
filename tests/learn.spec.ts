@@ -12,7 +12,7 @@ interface LearnedProcess {
   name: string;
   occurrences: number;
   steps: unknown[];
-  variables: { name: string; kind: 'target' | 'value'; examples: string[] }[];
+  variables: { name: string; kind: 'target' | 'value'; stepIndex: number; examples: string[] }[];
 }
 
 test.beforeEach(async ({ page }) => {
@@ -245,4 +245,65 @@ test('does not mistake unrelated actions for a process', async ({ page }) => {
   // A single step repeated is someone browsing, not a procedure worth
   // offering to take over.
   expect(await learned(page)).toBeNull();
+});
+
+test('starts the process at the step that picks the order, not mid-cycle', async ({ page }) => {
+  await gotoApp(page, 'v1');
+
+  // The user opens an order first and only then presses Record, so what gets
+  // watched is "set status, save, open the next one" — the same cycle, but
+  // rotated. Replayed literally, run one would edit whatever order happened to
+  // be on screen, which is not the order the user asked for.
+  await page.locator(ROW_SELECTOR).filter({ hasText: 'ORD-1000' }).first().getByText('ORD-1000', { exact: true }).click();
+  await watch(page);
+
+  await page.locator('#order-status').selectOption('processing');
+  await page.getByRole('button', { name: 'Save order' }).click();
+  await processOrder(page, 'ORD-1001', 'processing');
+  await processOrder(page, 'ORD-1002', 'processing');
+
+  const process = (await learned(page))!;
+  expect(process).not.toBeNull();
+
+  // The learned process begins by choosing the order.
+  const [variable] = process.variables;
+  expect(variable.kind).toBe('target');
+  expect(variable.stepIndex).toBe(0);
+  expect(variable.examples[0]).toBe('ORD-1001');
+
+  // And it acts on what it is handed, leaving a bystander alone.
+  const before = await statusOf(page, 'ORD-1007');
+  await runProcess(page, [['ORD-1006']]);
+  expect(await statusOf(page, 'ORD-1006')).toBe('processing');
+  expect(await statusOf(page, 'ORD-1007')).toBe(before);
+});
+
+test('runs the process against a filtered list that shrinks as it goes', async ({ page }) => {
+  await gotoApp(page, 'v1');
+
+  // The user's actual flow: filter the table down to one status, then work
+  // through what's left. Every save moves an order out of the filter, so the
+  // set of rows shifts under replay between one step and the next — the run
+  // has to keep hitting the orders it was given, not the positions they were
+  // in when it started.
+  await page.locator('select').first().selectOption('processing');
+  const visible = await page.locator(ROW_SELECTOR).evaluateAll((rows) =>
+    rows.map((r) => (r.textContent ?? '').match(/ORD-\d+/)?.[0]).filter(Boolean).slice(0, 4),
+  );
+  expect(visible.length).toBeGreaterThanOrEqual(4);
+
+  await watch(page);
+  await processOrder(page, visible[0]!, 'shipped');
+  await processOrder(page, visible[1]!, 'shipped');
+
+  const results = await runProcess(page, [[visible[2]!], [visible[3]!]]);
+
+  // No step may report "did not become actionable" for a row that was on
+  // screen the whole time.
+  expect(results.flat().map((step) => step.status)).not.toContain('failed');
+
+  // Both are gone from the processing filter, which is only true if their
+  // status actually changed.
+  expect(await statusOf(page, visible[2]!)).toBeNull();
+  expect(await statusOf(page, visible[3]!)).toBeNull();
 });

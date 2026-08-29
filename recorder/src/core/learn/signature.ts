@@ -73,3 +73,11 @@ export function isIncidental(step: RecordingStep): boolean {
 export function meaningfulSteps(steps: RecordingStep[]): RecordingStep[] {
   return steps.filter((step) => !isIncidental(step));
 }
+
+/** The text a step was performed against, if it has one. This is the part
+ *  that differs between runs of the same process, which makes it both the
+ *  process's input and the marker for where a cycle begins. */
+export function targetText(step: RecordingStep): string | null {
+  const text = step.target?.candidates.find((c) => c.kind === 'text');
+  return text ? text.value.replace(/^text:"|"$/g, '') : null;
+}
