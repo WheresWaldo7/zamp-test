@@ -38,6 +38,16 @@ async function resolveWithHealing(
   if (found) return { found, healed: false, findMs, healMs: 0 };
   if (!options.onHeal) return { found: null, healed: false, findMs, healMs: 0 };
 
+  // Healing asks a human "where did this go?", which is the right question
+  // when the app has been rebuilt around a step that is part of the process.
+  // It is the wrong question for the step that names *this run's* instance:
+  // the value came from the person a moment ago, and if it isn't on the page
+  // the answer is that they mistyped it, not that an element moved. Asking
+  // anyway stalls an unattended batch on a prompt nobody is there to answer,
+  // and invites pointing at some other row — which is how a run ends up
+  // acting on an order that was never named.
+  if (step.instanceTarget) return { found: null, healed: false, findMs, healMs: 0 };
+
   const healStartedAt = performance.now();
 
   // Finding nothing usually means findTarget just finished scrolling every

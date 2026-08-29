@@ -6,20 +6,27 @@ import { meaningfulSteps, stepSignature, targetText } from './signature';
 const MIN_OCCURRENCES = 2;
 
 /**
- * One action repeated is a process only when the action changes something.
+ * One action repeated is a process only when that single action both picks
+ * out what it acts on and changes it.
  *
- * Opening one order after another is reading; the tool offering to take that
- * over would be interrupting someone who is just looking around. Dragging one
- * item after another into place is work, and each drag is a whole unit of it —
- * so insisting a process be at least two steps long would describe four drags
- * as "two drags, done twice" and demand two items every time it ran.
+ * A drag does: it names the thing and the place, and moving four items into
+ * order is four whole units of work. Insisting on two steps described that as
+ * "two drags, done twice" and demanded two items every time it ran.
+ *
+ * Nothing else does. Opening one order after another names things without
+ * changing them — that is reading, and offering to take it over interrupts
+ * someone who is only looking. Typing in a filter box changes something
+ * without naming it, and two searches in a row is how everyone uses a search
+ * box; treating that as a procedure means a green "noticed a process" panel
+ * for ordinary typing, and worse, it wins against the real multi-step process
+ * happening around it.
  */
 const MIN_PATTERN_LENGTH = 1;
 
-const CONSEQUENTIAL_ACTIONS = new Set(['drag', 'input', 'change', 'submit']);
+const SELF_CONTAINED_ACTIONS = new Set(['drag']);
 
 function worthAutomatingAlone(step: RecordingStep): boolean {
-  return CONSEQUENTIAL_ACTIONS.has(step.action.type);
+  return SELF_CONTAINED_ACTIONS.has(step.action.type);
 }
 
 export interface DetectedPattern {

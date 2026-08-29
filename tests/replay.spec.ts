@@ -214,10 +214,11 @@ test('the rating widget shows the order it is looking at', async ({ page }) => {
   // rendered an empty row of stars for an order rated four — and then held on
   // to whatever was last clicked, which is what surfaced as the next order
   // opening pre-filled.
+  // Polled, not read once: opening an order is a React commit followed by the
+  // custom element re-rendering, and reading between the two is a race that
+  // fails about one run in twenty. ORD-1000 is rated 4 in the seeded fixture.
   await open('ORD-1000');
-  const opened = await widget();
-  expect(opened.value).toBeGreaterThan(0);
-  expect(opened.filled).toBe(opened.value);
+  await expect.poll(widget).toEqual({ filled: 4, value: 4 });
 
   await page.evaluate(() => {
     const el = document.querySelector('x-rating') as HTMLElement;

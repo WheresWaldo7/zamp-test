@@ -50,4 +50,9 @@ export interface RecordingStep {
    *  Not inferred automatically; Stage 4's step-list UI is where a human
    *  marks a step this way. */
   optional?: boolean;
+  /** This step's target came from a value the user supplied for this run —
+   *  the step that decides *which* thing the run is about. Marked because a
+   *  failure here means something different from any other step failing:
+   *  not "the app moved", but "what you asked for isn't here". */
+  instanceTarget?: boolean;
 }

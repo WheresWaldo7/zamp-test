@@ -143,7 +143,16 @@ export class Panel {
     });
 
     this.setupHeaderInteractions();
-    this.setCollapsed(this.initialLayout?.collapsed ?? false);
+    // Collapsed until asked otherwise. Expanded, the panel is ~370px tall and
+    // sits over the right-hand detail pane, which on a 1280x720 laptop is
+    // exactly where every control a recording needs lives — the status select,
+    // the rating, and in the refactored variant the Save button itself. The
+    // first thing a new user does is press Record and then find that Save does
+    // nothing, with no indication that the tool they just started is the thing
+    // swallowing the click. Collapsed it clears the pane entirely, and it still
+    // shows the controls and the "noticed a process" notice; only the step list
+    // is folded away, one click from being back.
+    this.setCollapsed(this.initialLayout?.collapsed ?? true);
   }
 
   /**

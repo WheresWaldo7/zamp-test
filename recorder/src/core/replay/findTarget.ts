@@ -2,7 +2,17 @@ import { describeHostSegment } from '../resolveTarget';
 import { findByStrategy, STRATEGY_BY_KIND } from '../describe/strategies';
 import type { DescribedTarget, SelectorCandidate } from '../describe/types';
 
-const MAX_SCROLL_ATTEMPTS = 8;
+/**
+ * The probe stops on its own as soon as nothing can scroll any further, so
+ * the real limit is how long it is willing to hunt — not a step count. Eight
+ * steps of 80% of a viewport covered about ninety rows, which looks generous
+ * until the list has a hundred and fifty and the row being asked for is near
+ * the end. It reported the order as missing while it was sitting in the list
+ * the whole time.
+ */
+const SCROLL_PROBE_BUDGET_MS = 4000;
+/** Hard stop, so a container that reports progress forever cannot spin. */
+const MAX_SCROLL_ATTEMPTS = 200;
 const SCROLL_RETRY_DELAY_MS = 100;
 
 function sleep(ms: number): Promise<void> {
@@ -141,7 +151,8 @@ export async function findTarget(target: DescribedTarget): Promise<FoundTarget |
   const originalScrollTops = scrollers.map((scroller) => scroller.scrollTop);
 
   let found: FoundTarget | null = null;
-  for (let attempt = 0; attempt < MAX_SCROLL_ATTEMPTS && !found; attempt++) {
+  const deadline = Date.now() + SCROLL_PROBE_BUDGET_MS;
+  for (let attempt = 0; attempt < MAX_SCROLL_ATTEMPTS && !found && Date.now() < deadline; attempt++) {
     let progressed = false;
     for (const scroller of scrollers) {
       if (scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight) {

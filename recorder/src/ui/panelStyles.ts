@@ -4,7 +4,7 @@ export const PANEL_STYLES = `
 
   .panel {
     position: fixed;
-    top: 16px;
+    top: 10px;
     left: auto;
     right: 16px;
     width: 340px;
@@ -122,20 +122,29 @@ export const PANEL_STYLES = `
   /* Deliberately the loudest thing in the panel: it is the one part that
      speaks without being asked. */
   .learned {
-    padding: 12px;
+    /* Trimmed deliberately rather than by eye: collapsed, the panel has to
+       stay clear of the detail pane's controls, and the notice is the part
+       that decides its height. */
+    padding: 10px 12px;
+    /* Bounded rather than tuned. The collapsed panel's height is header +
+       controls + this, and it has to stay clear of whatever the app puts
+       below it. Letting the notice grow to fit its text made that clearance
+       a function of font metrics, which is not something to rely on. */
+    max-height: 150px;
+    overflow-y: auto;
     border-top: 1px solid #2e2c3a;
     background: #10231c;
     border-left: 3px solid #10b981;
   }
   .learned-title { font-weight: 600; color: #6ee7b7; margin-bottom: 4px; }
-  .learned-name { color: #d1fae5; line-height: 1.4; margin-bottom: 8px; }
-  .learned-vars { color: #8f8aa3; font-size: 10px; line-height: 1.5; margin-bottom: 8px; }
+  .learned-name { color: #d1fae5; line-height: 1.35; margin-bottom: 6px; }
+  .learned-vars { color: #8f8aa3; font-size: 10px; line-height: 1.4; margin-bottom: 6px; }
   .learned-vars b { color: #a7f3d0; font-weight: 600; }
 
   .learned-input {
     width: 100%;
     box-sizing: border-box;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     padding: 6px 8px;
     border-radius: 6px;
     border: 1px solid #2f5f4d;

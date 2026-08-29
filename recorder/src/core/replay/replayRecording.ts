@@ -21,7 +21,13 @@ export async function replayRecording(
     options.onStepResult?.(result, index);
     console.log('[replay]', result);
 
-    if (result.status === 'failed' && !options.continueOnFailure) break;
+    // continueOnFailure exists so one cosmetic miss doesn't abandon a whole
+    // run. It must not apply to the step that picks the instance: every step
+    // after it is written to act on "the thing that is open now", so carrying
+    // on past it means setting a status and saving whatever happens to be on
+    // screen — an order nobody asked for. A run that cannot find its subject
+    // has nothing left worth doing.
+    if (result.status === 'failed' && (!options.continueOnFailure || step.instanceTarget)) break;
     if (options.stepDelayMs) await sleep(options.stepDelayMs);
   }
 

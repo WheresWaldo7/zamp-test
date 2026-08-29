@@ -50,10 +50,14 @@ function applyVariable(step: RecordingStep, variable: ProcessVariable, value: st
   // row is found even when nothing about the recorded cell mentions the id.
   const scope = step.target.scope;
   if (scope) {
-    return { ...step, target: { ...step.target, scope: { ...scope, text: value }, candidates } };
+    return {
+      ...step,
+      instanceTarget: true,
+      target: { ...step.target, scope: { ...scope, text: value }, candidates },
+    };
   }
 
-  return { ...step, target: { ...step.target, candidates } };
+  return { ...step, instanceTarget: true, target: { ...step.target, candidates } };
 }
 
 /**
