@@ -211,6 +211,28 @@ test('substitutes a varying value as well as a varying target', async ({ page })
   expect(await statusOf(page, 'ORD-1004')).toBe('delivered');
 });
 
+test('recognises the process when each pass clicks a different column', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // Nobody aims for the same cell twice. Opening an order by its id on one
+  // pass and by its company name on the next is the same intention, and only
+  // one of those cells carries a CSS-Module class — so a shape built from the
+  // class saw two unrelated actions and learned nothing.
+  for (const column of [0, 1]) {
+    await page.evaluate((column) => {
+      const row = document.querySelectorAll('[class*="_row_"]')[0];
+      (row.querySelectorAll('span')[column] as HTMLElement).click();
+    }, column);
+    await page.locator('#order-status').selectOption('shipped');
+    await page.getByRole('button', { name: 'Save order' }).click();
+  }
+
+  const process = await learned(page);
+  expect(process).not.toBeNull();
+  expect(process!.occurrences).toBe(2);
+});
+
 test('does not mistake unrelated actions for a process', async ({ page }) => {
   await gotoApp(page, 'v1');
   await watch(page);

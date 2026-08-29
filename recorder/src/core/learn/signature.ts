@@ -25,15 +25,20 @@ import type { DescribedTarget, RecordingAction, RecordingStep } from '../describ
  */
 function shapeOfTarget(target: DescribedTarget): string {
   const role = target.candidates.find((c) => c.kind === 'role');
-  const attr = target.candidates.find((c) => c.kind === 'attr');
   const struct = target.candidates.find((c) => c.kind === 'struct');
+  const attr = target.candidates.find((c) => c.kind === 'attr');
 
   const shape =
     role?.value ??
-    attr?.value ??
-    // Positional indices are the varying part — `div:nth-of-type(7) > span`
-    // and `div:nth-of-type(12) > span` are the same cell in different rows.
+    // Structure before class, because a class is only shared by *some* of the
+    // things a person treats as equivalent. Clicking a row's id cell and
+    // clicking its company cell are the same intention — open that order —
+    // but only the id cell carries a CSS-Module class, so preferring the class
+    // gave the two clicks different shapes and the repetition went unnoticed.
+    // With positional indices stripped, both are `… > div > span`: the same
+    // kind of element in the same place, which is what "same step" means here.
     struct?.value.replace(/:nth-of-type\(\d+\)/g, '') ??
+    attr?.value ??
     'unknown';
 
   const scope = target.shadowPath.length > 0 ? `@${target.shadowPath.join('>')}` : '';
