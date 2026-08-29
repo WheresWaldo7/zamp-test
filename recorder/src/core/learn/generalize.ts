@@ -1,4 +1,4 @@
-import type { RecordingStep } from '../describe/types';
+import type { DescribedTarget, RecordingStep } from '../describe/types';
 import { describeStepForHuman } from '../heal/describeForHuman';
 import { targetText } from './signature';
 import type { DetectedPattern } from './detectRepetition';
@@ -116,10 +116,70 @@ export function generalize(pattern: DetectedPattern): LearnedProcess {
 
   return {
     name: nameProcess(template, variables),
-    steps: template,
+    steps: pruneToConstant(pattern.occurrences, variables),
     variables,
     occurrences: pattern.occurrences.length,
   };
+}
+
+/**
+ * Keeps only the ways of describing a target that held on every run.
+ *
+ * The template is one run, so it carries that run's specifics even where they
+ * were never the point. Dragging four views to the end of a list drops onto a
+ * different neighbour every time — "Shipped today", then "All orders" — while
+ * the position, last in the list, never changes. Keep the text and the process
+ * means "drop it next to Shipped today", which stops being true the moment the
+ * list reorders. Keep only what every run agreed on and it means "drop it at
+ * the end", which is what the person was doing.
+ *
+ * The target carrying a variable is left alone: that one is *supposed* to
+ * differ per run, and substitution rewrites it.
+ */
+function pruneToConstant(occurrences: RecordingStep[][], variables: ProcessVariable[]): RecordingStep[] {
+  const [template] = occurrences;
+  const varies = new Set(variables.filter((v) => v.kind === 'target').map((v) => v.stepIndex));
+
+  return template.map((step, stepIndex) => {
+    const instances = occurrences.map((occurrence) => occurrence[stepIndex]);
+
+    const target = varies.has(stepIndex)
+      ? step.target
+      : constantOf(step.target, instances.map((instance) => instance.target));
+
+    const action =
+      step.action.type === 'drag'
+        ? {
+            ...step.action,
+            to:
+              constantOf(
+                step.action.to,
+                instances.map((instance) => (instance.action.type === 'drag' ? instance.action.to : null)),
+              ) ?? step.action.to,
+          }
+        : step.action;
+
+    return { ...step, target, action };
+  });
+}
+
+/** Drops candidates that any run described differently. Returns the original
+ *  untouched if nothing survives — a target with no candidates can't be found
+ *  at all, which is worse than one described too specifically. */
+function constantOf(
+  template: DescribedTarget | null,
+  instances: (DescribedTarget | null)[],
+): DescribedTarget | null {
+  if (!template || instances.some((instance) => !instance)) return template;
+
+  const others = instances.slice(1) as DescribedTarget[];
+  const kept = template.candidates.filter((candidate) =>
+    others.every((other) =>
+      other.candidates.some((c) => c.kind === candidate.kind && c.value === candidate.value),
+    ),
+  );
+
+  return kept.length > 0 ? { ...template, candidates: kept } : template;
 }
 
 /**

@@ -5,6 +5,9 @@ import type { CapturedAction, CapturedStep, CapturedTarget } from './types';
 
 const INPUT_DEBOUNCE_MS = 500;
 const SCROLL_DEBOUNCE_MS = 200;
+/** Long enough to outlast the click the browser fires after a drag's
+ *  pointerup, short enough never to reach an unrelated later click. */
+const SUPPRESS_CLICK_MS = 50;
 
 const LISTENER_OPTS = { capture: true, passive: true } as const;
 
@@ -17,6 +20,7 @@ export class Recorder {
   private inputTimer: ReturnType<typeof setTimeout> | null = null;
   private scrollSessions = new Map<Element, { step: CapturedStep; timer: ReturnType<typeof setTimeout> }>();
   private suppressClick = false;
+  private suppressClickTimer = 0;
 
   private readonly hover = new HoverCapture(
     (target) => this.emit({ type: 'hover' }, target),
@@ -25,10 +29,20 @@ export class Recorder {
   private readonly drag = new DragCapture({
     onDrag: (from, to) => this.emit({ type: 'drag', to }, from),
     suppressNextClick: () => {
+      // The trailing click arrives in a later *task* than pointerup, so a
+      // microtask checkpoint drains long before it — the flag was always back
+      // to false by the time it mattered, and every drag was recorded as a
+      // drag plus a click on whatever ancestor the press and release shared.
+      // A process made of one drag then looked like two steps, and asked for
+      // two inputs to run.
+      //
+      // So the flag is consumed by the click itself, with a timer only as a
+      // fallback for the libraries that cancel the click outright.
       this.suppressClick = true;
-      queueMicrotask(() => {
+      window.clearTimeout(this.suppressClickTimer);
+      this.suppressClickTimer = window.setTimeout(() => {
         this.suppressClick = false;
-      });
+      }, SUPPRESS_CLICK_MS);
     },
     isIgnored: (element) => this.isIgnored(element),
   });
@@ -121,7 +135,13 @@ export class Recorder {
   }
 
   private handleClick = (event: MouseEvent) => {
-    if (this.suppressClick) return; // a drag on this same interaction already emitted a step
+    if (this.suppressClick) {
+      // A drag on this same interaction already emitted a step. Consume the
+      // flag rather than leaving it set, so it can never swallow a real click.
+      this.suppressClick = false;
+      window.clearTimeout(this.suppressClickTimer);
+      return;
+    }
     const target = this.resolve(event);
     if (!target) return;
 

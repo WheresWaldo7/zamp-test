@@ -5,9 +5,22 @@ import { meaningfulSteps, stepSignature, targetText } from './signature';
  *  than a coincidence. Two is a pair; three is a habit. */
 const MIN_OCCURRENCES = 2;
 
-/** A single step repeated over and over is usually someone clicking around,
- *  not a procedure worth automating. */
-const MIN_PATTERN_LENGTH = 2;
+/**
+ * One action repeated is a process only when the action changes something.
+ *
+ * Opening one order after another is reading; the tool offering to take that
+ * over would be interrupting someone who is just looking around. Dragging one
+ * item after another into place is work, and each drag is a whole unit of it —
+ * so insisting a process be at least two steps long would describe four drags
+ * as "two drags, done twice" and demand two items every time it ran.
+ */
+const MIN_PATTERN_LENGTH = 1;
+
+const CONSEQUENTIAL_ACTIONS = new Set(['drag', 'input', 'change', 'submit']);
+
+function worthAutomatingAlone(step: RecordingStep): boolean {
+  return CONSEQUENTIAL_ACTIONS.has(step.action.type);
+}
 
 export interface DetectedPattern {
   /** The shape of the process: one signature per step. */
@@ -36,6 +49,8 @@ export function detectRepetition(steps: RecordingStep[]): DetectedPattern | null
     const maxLength = Math.floor((signatures.length - start) / MIN_OCCURRENCES);
 
     for (let length = MIN_PATTERN_LENGTH; length <= maxLength; length++) {
+      if (length === 1 && !worthAutomatingAlone(candidates[start])) continue;
+
       let count = 1;
       while (matchesAt(signatures, start, start + count * length, length)) count++;
       if (count < MIN_OCCURRENCES) continue;

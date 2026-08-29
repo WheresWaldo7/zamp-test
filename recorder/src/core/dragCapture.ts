@@ -68,9 +68,43 @@ export class DragCapture {
     for (const element of document.elementsFromPoint(x, y)) {
       if (element === source || source.contains(element)) continue;
       if (this.options.isIgnored?.(element)) continue;
-      return element;
+      return this.nearestSibling(element, source, x, y) ?? element;
     }
     return null;
+  }
+
+  /**
+   * A release a few pixels into the padding between two items hit-tests to
+   * their container, but that is not what the drag library concluded: dnd-kit
+   * and its peers resolve a drop against the item rectangles they track, so
+   * the same gesture still reorders. Recording the container loses the only
+   * part of the drop that carried meaning, and replays as a no-op — the drag
+   * reports success and nothing moves.
+   *
+   * So when the hit is a container holding several items shaped like the one
+   * being dragged, take whichever of those the pointer is actually nearest.
+   * That is the same question the library asked.
+   */
+  private nearestSibling(container: Element, source: Element, x: number, y: number): Element | null {
+    const items = Array.from(container.children).filter(
+      (child) => child !== source && child.tagName === source.tagName,
+    );
+    if (items.length < 2) return null;
+
+    let best: Element | null = null;
+    let bestDistance = Infinity;
+
+    for (const item of items) {
+      if (this.options.isIgnored?.(item)) continue;
+      const rect = item.getBoundingClientRect();
+      const distance = Math.hypot(rect.left + rect.width / 2 - x, rect.top + rect.height / 2 - y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = item;
+      }
+    }
+
+    return best;
   }
 
   private handleUp = (event: PointerEvent) => {

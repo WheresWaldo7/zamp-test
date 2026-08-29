@@ -361,3 +361,109 @@ test('takes the input from the row, not the cell the user happened to click', as
   expect(await statusOf(page, 'ORD-1044')).toBe('processing');
   expect(await statusOf(page, 'ORD-1050')).not.toBe('processing');
 });
+
+/**
+ * Move the last saved-view chip to the front, the way a person reorders them.
+ * Leftward on purpose: lifting the last chip out shifts nothing, so where the
+ * first chip sits is the same before and during the drag. Dragging rightward
+ * makes every chip slide left by the width of the one in hand, and the test
+ * ends up measuring that animation rather than the recorder.
+ */
+async function dragToFront(page: import('@playwright/test').Page): Promise<string> {
+  const labels = await page.locator('li').allTextContents();
+  const moving = labels[labels.length - 1];
+
+  const from = (await page.locator('li', { hasText: moving }).first().boundingBox())!;
+  const to = (await page.locator('li', { hasText: labels[0] }).first().boundingBox())!;
+
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) {
+    await page.mouse.move(
+      from.x + from.width / 2 + ((to.x - from.x) * i) / 10,
+      from.y + from.height / 2 + ((to.y - from.y) * i) / 10,
+    );
+    await page.waitForTimeout(16);
+  }
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2);
+  await page.waitForTimeout(60);
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  return moving;
+}
+
+test('a drag is one step, not a drag and a click', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  await dragToFront(page);
+
+  // The browser fires a click after the drag's pointerup, on whichever
+  // ancestor the press and release had in common. Recording it turns one
+  // gesture into two steps — and then into a process that wants two inputs.
+  const types = await page.evaluate(() =>
+    (window as never as { __recorder: { getRecording(): { action: { type: string } }[] } }).__recorder
+      .getRecording()
+      .map((step) => step.action.type),
+  );
+
+  expect(types).toContain('drag');
+  expect(types).not.toContain('click');
+});
+
+test('asks for one item when the process is one drag', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  for (let pass = 0; pass < 3; pass++) await dragToFront(page);
+
+  // A drag is a whole unit of work by itself. Insisting a process be at least
+  // two steps long described three drags as "two drags, done twice", and then
+  // demanded two items on every run — how many things get moved is the
+  // person's decision, not the tool's.
+  const process = (await learned(page))!;
+  expect(process).not.toBeNull();
+  expect(process.steps).toHaveLength(1);
+  expect(process.variables).toHaveLength(1);
+  expect(process.variables[0].kind).toBe('target');
+});
+
+test('drags to the position it learned, not to whichever neighbour was there', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  for (let pass = 0; pass < 3; pass++) await dragToFront(page);
+
+  // Each pass dropped beside a different chip, so the only thing every run
+  // agreed on was the position. Keeping the neighbour's name would make the
+  // process mean "put it next to Shipped today", which stops being true the
+  // moment the list moves.
+  const process = (await learned(page))!;
+  const { to } = (process.steps[0] as { action: { to: { candidates: { kind: string }[] } } }).action;
+  expect(to.candidates.some((candidate) => candidate.kind === 'text')).toBe(false);
+
+  const before = await page.locator('li').allTextContents();
+  const moving = before[before.length - 1];
+
+  const results = await runProcess(page, [[moving]]);
+  expect(results.flat().map((step) => step.status)).not.toContain('failed');
+
+  // And it actually moved — a drag that resolves to the list itself rather
+  // than an item reports success and reorders nothing.
+  expect((await page.locator('li').allTextContents())[0]).toBe(moving);
+});
+
+test('still ignores a click repeated on its own', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // The counterpart to allowing one-step processes: opening one order after
+  // another is reading, not a procedure, and offering to take it over would
+  // interrupt someone who is only looking around.
+  for (const id of ['ORD-1000', 'ORD-1001', 'ORD-1002']) {
+    await page.locator(ROW_SELECTOR).filter({ hasText: id }).first().getByText(id, { exact: true }).click();
+  }
+
+  expect(await learned(page)).toBeNull();
+});
