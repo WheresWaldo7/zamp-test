@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  ROW_SELECTOR,
   TARGET_ORDER,
   effectfulSteps,
   gotoApp,
@@ -190,4 +191,43 @@ test('the shadow-DOM rating star is addressable at all', async ({ page }) => {
   // stopping at the null parentElement.
   expect(star.target?.shadowPath).toEqual(['x-rating']);
   expect(star.target?.candidates.some((c) => c.kind === 'struct' && /nth-of-type/.test(c.value))).toBe(true);
+});
+
+test('the rating widget shows the order it is looking at', async ({ page }) => {
+  await gotoApp(page, 'v1');
+
+  const open = async (id: string) =>
+    page.locator(ROW_SELECTOR).filter({ hasText: id }).first().getByText(id, { exact: true }).click();
+
+  /** What the widget displays, next to the value it was actually given. */
+  const widget = async () =>
+    page.evaluate(() => {
+      const el = document.querySelector('x-rating') as HTMLElement & { value: number };
+      const filled = Array.from(el.shadowRoot!.querySelectorAll('.star')).filter(
+        (star) => star.textContent === '★',
+      ).length;
+      return { filled, value: el.value };
+    });
+
+  // React 19 assigns a non-string prop straight to the element as a property.
+  // A custom element that only watches attributes never hears about it, so it
+  // rendered an empty row of stars for an order rated four — and then held on
+  // to whatever was last clicked, which is what surfaced as the next order
+  // opening pre-filled.
+  await open('ORD-1000');
+  const opened = await widget();
+  expect(opened.value).toBeGreaterThan(0);
+  expect(opened.filled).toBe(opened.value);
+
+  await page.evaluate(() => {
+    const el = document.querySelector('x-rating') as HTMLElement;
+    (el.shadowRoot!.querySelectorAll('.star')[4] as HTMLElement).click();
+  });
+  expect(await widget()).toEqual({ filled: 5, value: 5 });
+
+  // The next order shows its own rating rather than the one just clicked.
+  // ORD-1001 is rated 3 — the fixture is seeded, so that is a fact, not a
+  // coincidence of this run.
+  await open('ORD-1001');
+  await expect.poll(widget).toEqual({ filled: 3, value: 3 });
 });
