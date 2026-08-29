@@ -353,3 +353,30 @@ test('typing, backspacing, and typing again is not a two-input process', async (
   // typed the second one into the same box, so the first search never ran.
   expect(await learned(page)).toBeNull();
 });
+
+test('a process with two inputs can be run with just the first', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // ORD-1000 is rated 4 and ORD-1001 rated 3, so clicking the same star reads
+  // as "★" on one pass and "☆" on the next. That makes the star look like a
+  // second input, when the person clicked the same star both times.
+  for (const id of ['ORD-1000', 'ORD-1001']) {
+    await openOrder(page, id);
+    await page.waitForTimeout(150);
+    await page.locator('#order-status').selectOption('cancelled');
+    await setStars(page, 4);
+    await page.getByRole('button', { name: 'Save order' }).click();
+    await page.waitForTimeout(150);
+  }
+
+  const process = (await learned(page))!;
+  expect(process.variables.length).toBeGreaterThan(1);
+
+  // Supplying only the order has to work. Requiring a value for every input
+  // the tool thought it saw turns a process you could run with an order
+  // number into one you cannot run at all.
+  const results = await run(page, [['ORD-1002']]);
+  expect(results.flat().some((s) => s.status === 'failed')).toBe(false);
+  expect(await statusOf(page, 'ORD-1002')).toBe('cancelled');
+});

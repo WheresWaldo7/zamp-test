@@ -372,6 +372,16 @@ export class Panel {
         line.append(label, document.createTextNode(`: ${variable.examples.join(', ')}`));
         this.learnedVarsEl.appendChild(line);
       }
+
+      // Only the first input is actually required. Saying so matters: the
+      // others are often things that merely looked different between passes,
+      // and a person who has to invent a value for each of them will conclude
+      // the process cannot be run rather than that it can be run simply.
+      if (process.variables.length > 1) {
+        const note = document.createElement('div');
+        note.textContent = `Give ${process.variables[0].name} on its own, or add the rest after commas.`;
+        this.learnedVarsEl.appendChild(note);
+      }
     }
     // The placeholder teaches the format by example rather than explaining
     // it: the values already seen, in the order they'd need to be typed.
@@ -399,8 +409,14 @@ export class Panel {
    * it as one run with a spare value silently drops half the request.
    *
    * With several inputs the comma has to mean "next value", so a line is one
-   * run. A line with the wrong number of values is reported rather than
-   * quietly padded or truncated.
+   * run. Giving fewer values than there are inputs is allowed and means "leave
+   * the rest as I recorded them" — a process often has one input the person
+   * actually varies and others that only look variable because something on
+   * screen happened to differ between passes. Insisting on a value for every
+   * one of them turns a process you could run with an order number into one
+   * you cannot run at all. Too many values is still an error, because that is
+   * a request that cannot be honoured rather than one that can be honoured
+   * partly.
    */
   private parseRuns(variableCount: number): { runs: string[][]; error: string | null } {
     const lines = this.learnedInputEl.value
@@ -418,12 +434,12 @@ export class Panel {
     }
 
     const runs = lines.map((line) => line.split(',').map((value) => value.trim()).filter(Boolean));
-    const wrong = runs.findIndex((values) => values.length !== variableCount);
-    return wrong === -1
+    const tooMany = runs.findIndex((values) => values.length > variableCount);
+    return tooMany === -1
       ? { runs, error: null }
       : {
           runs: [],
-          error: `Line ${wrong + 1} has ${runs[wrong].length} value(s); this process needs ${variableCount}.`,
+          error: `Line ${tooMany + 1} has ${runs[tooMany].length} values; this process takes at most ${variableCount}.`,
         };
   }
 

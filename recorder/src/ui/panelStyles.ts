@@ -126,19 +126,25 @@ export const PANEL_STYLES = `
        stay clear of the detail pane's controls, and the notice is the part
        that decides its height. */
     padding: 10px 12px;
-    /* Bounded rather than tuned. The collapsed panel's height is header +
-       controls + this, and it has to stay clear of whatever the app puts
-       below it. Letting the notice grow to fit its text made that clearance
-       a function of font metrics, which is not something to rely on. */
-    max-height: 150px;
-    overflow-y: auto;
     border-top: 1px solid #2e2c3a;
     background: #10231c;
     border-left: 3px solid #10b981;
   }
   .learned-title { font-weight: 600; color: #6ee7b7; margin-bottom: 4px; }
   .learned-name { color: #d1fae5; line-height: 1.35; margin-bottom: 6px; }
-  .learned-vars { color: #8f8aa3; font-size: 10px; line-height: 1.4; margin-bottom: 6px; }
+  .learned-vars {
+    color: #8f8aa3;
+    font-size: 10px;
+    line-height: 1.4;
+    margin-bottom: 6px;
+    /* The list of inputs is the only part of the notice that grows without
+       bound, so it is the only part that scrolls. Capping the whole notice
+       instead pushed "Do the rest for me" below the fold — hiding the button
+       the notice exists to offer, which is a worse failure than the height it
+       was trying to control. */
+    max-height: 52px;
+    overflow-y: auto;
+  }
   .learned-vars b { color: #a7f3d0; font-weight: 600; }
 
   .learned-input {
