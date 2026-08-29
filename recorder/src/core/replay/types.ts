@@ -44,4 +44,9 @@ export interface ReplayOptions {
   /** Marks elements belonging to the recorder's own UI so they don't count
    *  as occluding the page during actionability checks. */
   isOverlay?: (element: Element) => boolean;
+  /** Called with the resolved element once it is actionable and immediately
+   *  before the action runs — the one moment where "which element is this
+   *  step about" is known and still true. Awaited, so a caller can hold the
+   *  run long enough for a person to see it. */
+  onBeforeAction?: (element: Element, step: RecordingStep) => void | Promise<void>;
 }

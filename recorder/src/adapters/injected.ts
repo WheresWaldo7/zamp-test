@@ -5,6 +5,7 @@ import { pickElement } from '../core/heal/elementPicker';
 import { waitForQuiescence } from '../core/replay/quiescence';
 import { replayRecording } from '../core/replay/replayRecording';
 import type { ReplayOptions, ReplayStepResult } from '../core/replay/types';
+import { Highlighter } from '../ui/highlight';
 import { Panel, type PanelLayout } from '../ui/panel';
 
 /** Adapter-level options. Reloading is a page concern, not something the
@@ -59,6 +60,15 @@ const PENDING_REPLAY_KEY = '__recorder_pending_replay';
 // arrangement the user made — collapsed, dragged aside — has to outlive the
 // navigation, or every run resets the view they set up to watch it.
 const PANEL_LAYOUT_KEY = '__recorder_panel_layout';
+
+// Paced for a person watching: long enough to see where a step landed,
+// short enough that a dozen steps don't become a wait.
+const DEFAULT_STEP_DELAY_MS = 600;
+const HIGHLIGHT_LEAD_MS = 350;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function loadPanelLayout(): PanelLayout | undefined {
   try {
@@ -125,9 +135,16 @@ const panel = new Panel({
 }, loadPanelLayout());
 panel.mount();
 
-// Without this the panel's own buttons would be captured as steps — the
-// recorder listens on document, and the panel is in the same document.
-recorder.shouldIgnore = (element) => panel.owns(element);
+const highlighter = new Highlighter();
+highlighter.mount();
+
+// Everything the recorder puts on the page is tagged, so one predicate
+// covers all of it — panel, highlight box, and anything added later —
+// instead of a list that has to be remembered and extended. Without this
+// the panel's own buttons would be captured as steps, since the recorder
+// listens on document and its UI lives in the same document.
+const isRecorderChrome = (element: Element) => !!element.closest?.('[data-recorder-ui]');
+recorder.shouldIgnore = (element) => isRecorderChrome(element) || panel.owns(element);
 
 // Describing has to happen inside this same synchronous callback, not later
 // in a batch pass. Recorder.emit() runs during the capture phase — before
@@ -200,17 +217,28 @@ async function runReplay(steps: RecordingStep[] = recording, options: RunOptions
   // steps, which is a fast way to corrupt the recording you're testing.
   setRecording(false);
 
+  const stepDelay = options.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
+
   try {
     return await replayRecording(steps, {
       continueOnFailure: true,
-      stepDelayMs: 600,
+      stepDelayMs: stepDelay,
       onHeal: healHandler,
-      isOverlay: (element) => panel.owns(element),
+      isOverlay: (element) => isRecorderChrome(element) || panel.owns(element),
       onStepStart: (_step, index) => panel.setStepStatus(index, 'running'),
       onStepResult: (result, index) => panel.applyResult(index, result, steps[index]),
+      // Show where the step is about to land, then hold briefly so it
+      // registers. Skipped entirely when the run isn't paced for a human —
+      // an unattended run has nobody to show it to.
+      onBeforeAction: async (element) => {
+        if (stepDelay <= 0) return;
+        highlighter.show(element);
+        await sleep(HIGHLIGHT_LEAD_MS);
+      },
       ...options,
     });
   } finally {
+    highlighter.hide();
     // Healing rewrites steps in place, so a run that needed a human is only
     // actually fixed if that correction outlives the page.
     if (steps === recording) persist(recording);

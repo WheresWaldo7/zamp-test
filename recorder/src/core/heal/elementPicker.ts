@@ -5,6 +5,9 @@ const HIGHLIGHT_ID = '__recorder_pick_highlight';
 function createHighlight(): HTMLElement {
   const el = document.createElement('div');
   el.id = HIGHLIGHT_ID;
+  // Tagged like the rest of the recorder's chrome so the same predicate
+  // keeps it out of recordings and out of hit-testing.
+  el.setAttribute('data-recorder-ui', '');
   Object.assign(el.style, {
     position: 'fixed',
     pointerEvents: 'none',

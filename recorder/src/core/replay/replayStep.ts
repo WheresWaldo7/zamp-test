@@ -84,6 +84,8 @@ export async function replayStep(step: RecordingStep, options: ReplayOptions = {
 
   let healedDestination = false;
 
+  await options.onBeforeAction?.(found.element, step);
+
   switch (step.action.type) {
     case 'click':
       performClick(found.element);
@@ -116,6 +118,9 @@ export async function replayStep(step: RecordingStep, options: ReplayOptions = {
       }
       healedDestination = destination.healed;
       destination.found.element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      // Shown for the drop target too, so a drag reads as a move between
+      // two places rather than a jump with an unexplained destination.
+      await options.onBeforeAction?.(destination.found.element, step);
       await performDrag(found.element, destination.found.element);
       break;
     }
