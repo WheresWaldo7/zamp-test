@@ -424,7 +424,16 @@ export class Panel {
       .map((line) => line.trim())
       .filter(Boolean);
 
-    if (variableCount <= 1) {
+    // A process with nothing to substitute into would take the values, ignore
+    // them, and repeat itself on whatever it recorded — which reads exactly
+    // like it did what you asked. Say so instead.
+    if (variableCount === 0) {
+      return lines.length === 0
+        ? { runs: [[]], error: null }
+        : { runs: [], error: 'This process has no inputs, so those values would be ignored. Clear the box to repeat it as recorded.' };
+    }
+
+    if (variableCount === 1) {
       const runs = lines
         .flatMap((line) => line.split(','))
         .map((value) => value.trim())

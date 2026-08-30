@@ -5,6 +5,10 @@ import type { TargetScope } from './types';
  *  or a card is a handful of levels above the thing you actually click. */
 const MAX_CLIMB = 6;
 
+/** The target is the repeated unit itself rather than something inside it —
+ *  what you get for clicking a row's own padding instead of one of its cells. */
+export const CONTAINER_ITSELF = -1;
+
 /** Text long enough to identify something but short enough to be a field
  *  rather than a whole row's worth of content. */
 const MIN_TEXT = 2;
@@ -50,9 +54,16 @@ function identifyingText(container: Element, peers: Element[]): string | null {
  * into a per-run input.
  */
 export function describeScope(element: Element): TargetScope | undefined {
-  let node = element.parentElement;
+  // Starts at the element, not its parent. A click lands on the row itself as
+  // often as on a cell inside it — anywhere in its padding will do — and
+  // looking only at ancestors missed exactly those clicks. The row then had no
+  // scope and no usable text of its own, so nothing appeared to vary between
+  // passes, the process was learned as having no inputs at all, and the order
+  // typed into the box was quietly ignored while it repeated itself on the row
+  // it happened to record.
+  let node: Element | null = element;
 
-  for (let depth = 0; node && depth < MAX_CLIMB; depth++, node = node.parentElement) {
+  for (let depth = 0; node && depth <= MAX_CLIMB; depth++, node = node.parentElement) {
     const container = attrStrategy.describe(node);
     if (!container) continue;
 
@@ -69,8 +80,11 @@ export function describeScope(element: Element): TargetScope | undefined {
     // element itself separates it from the same cell of another row. Every
     // descendant, not just the leaves, so the index means the same thing on
     // the way back out.
-    const index = Array.from(node.querySelectorAll('*')).indexOf(element);
-    if (index < 0) continue;
+    let index = CONTAINER_ITSELF;
+    if (node !== element) {
+      index = Array.from(node.querySelectorAll('*')).indexOf(element);
+      if (index < 0) continue;
+    }
 
     return { container, text, index };
   }

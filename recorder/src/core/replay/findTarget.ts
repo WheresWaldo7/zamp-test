@@ -1,4 +1,5 @@
 import { describeHostSegment } from '../resolveTarget';
+import { CONTAINER_ITSELF } from '../describe/scope';
 import { findByStrategy, STRATEGY_BY_KIND } from '../describe/strategies';
 import type { DescribedTarget, SelectorCandidate } from '../describe/types';
 
@@ -96,6 +97,15 @@ function findScoped(root: ParentNode, target: DescribedTarget): FoundTarget | nu
   const matching = containers.filter((container) => (container.textContent ?? '').includes(scope.text));
   if (matching.length !== 1) return null;
   const container = matching[0];
+
+  // The step acted on the unit itself, so the unit is the answer.
+  if (scope.index === CONTAINER_ITSELF) {
+    return {
+      element: container,
+      candidate: { kind: 'attr', value: `${scope.container} containing "${scope.text}"`, score: 0 },
+      candidateIndex: 0,
+    };
+  }
 
   // A candidate that survived re-pointing names the instance, so if one
   // resolves inside the right row it is the best answer available.

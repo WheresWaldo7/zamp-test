@@ -380,3 +380,32 @@ test('a process with two inputs can be run with just the first', async ({ page }
   expect(results.flat().some((s) => s.status === 'failed')).toBe(false);
   expect(await statusOf(page, 'ORD-1002')).toBe('cancelled');
 });
+
+test('clicking the row itself, not a cell in it, still finds the input', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // A click lands on the row's own padding as easily as on one of its cells.
+  // Looking for the repeated unit only among an element's *ancestors* missed
+  // exactly those clicks: the row had no scope and no usable text of its own,
+  // so nothing appeared to vary, the process was learned with no inputs at
+  // all, and an order typed into the box was ignored while the run repeated
+  // itself on the row it happened to record.
+  for (const id of ['ORD-1000', 'ORD-1001']) {
+    const row = page.locator(ROW_SELECTOR).filter({ hasText: id }).first();
+    const box = (await row.boundingBox())!;
+    await page.mouse.click(box.x + box.width - 8, box.y + box.height / 2);
+    await page.waitForTimeout(150);
+    await page.locator('#order-status').selectOption('cancelled');
+    await page.getByRole('button', { name: 'Save order' }).click();
+    await page.waitForTimeout(150);
+  }
+
+  const process = (await learned(page))!;
+  expect(process.variables).toHaveLength(1);
+  expect(process.variables[0].examples).toEqual(['ORD-1000', 'ORD-1001']);
+
+  const results = await run(page, [['ORD-1044']]);
+  expect(results.flat().map((s) => s.status)).not.toContain('failed');
+  expect(await statusOf(page, 'ORD-1044')).toBe('cancelled');
+});

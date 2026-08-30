@@ -104,12 +104,15 @@ export async function replayStep(step: RecordingStep, options: ReplayOptions = {
     return {
       stepId: step.id,
       status: 'failed',
-      // A scoped step failed for a reason the user can act on: the thing they
-      // named isn't on the page. Saying "no candidate resolved" sends them
-      // hunting through selectors for what is really a typo.
-      error: step.target.scope
-        ? `no row matching "${step.target.scope.text}"`
-        : 'no candidate resolved to a unique element',
+      // Only claim the row is missing when the row was the user's to name.
+      // A step replayed as recorded can fail for the opposite reason — the app
+      // renamed the container out from under it, with the row sitting right
+      // there — and telling someone their order does not exist when it plainly
+      // does sends them looking in the wrong place entirely.
+      error:
+        step.instanceTarget && step.target.scope
+          ? `no row matching "${step.target.scope.text}"`
+          : 'no candidate resolved to a unique element',
       timings,
     };
   }
