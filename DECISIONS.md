@@ -218,3 +218,34 @@ nobody was there to answer, and invited pointing at some other row.
 
 **Cost:** a genuine selector break on that one step now fails instead of
 asking for help.
+
+---
+
+### Typed values are stored in the clear, secrets included
+
+Every value a user types is captured verbatim, kept in `localStorage`, and
+comes out in the exported JSON. There is no exclusion list. Point this at a
+real site and it would take a password the same way it takes an order id, and
+keep it.
+
+It has not come up because the app it was built against has no login — but
+"it works on other sites" is a claim this project makes, and on other sites
+there are password fields.
+
+The fix is small and known: skip capture for `input[type="password"]`, and for
+anything whose `autocomplete` says `current-password`, `new-password`,
+`one-time-code` or `cc-*`. Type alone is not enough, since a "show password"
+toggle flips the field to `type="text"` while it is being typed into, and the
+`autocomplete` hint survives that flip. The step is better dropped than
+recorded with a blanked value: a step that remembers a secret was typed here
+is still a step replay would attempt, and it would put the wrong thing into a
+login form and report success.
+
+Left undone deliberately rather than missed. It was found after the scope was
+frozen, and it is a capture-time guard rather than anything the rest of the
+design rests on.
+
+**Cost:** the honest one — this is the first thing a security-minded reviewer
+looks for, and right now the answer is that the recorder would happily persist
+a credential. A flow that includes a login also cannot be replayed once the
+guard exists, because the recording will not contain the password.
