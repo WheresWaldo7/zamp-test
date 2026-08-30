@@ -1,14 +1,17 @@
 import type { DescribedTarget, RecordingStep } from '../describe/types';
 import { describeStepForHuman } from '../heal/describeForHuman';
-import { targetText } from './signature';
+import { targetPosition, targetText } from './signature';
 import type { DetectedPattern } from './detectRepetition';
 
 export interface ProcessVariable {
   /** Position in the process this varies at. */
   stepIndex: number;
-  /** `target` — the process was performed on a different thing each time.
-   *  `value`  — the same field was filled with something different each time. */
-  kind: 'target' | 'value';
+  /** `target`   — the process was performed on a different thing each time.
+   *  `value`    — the same field was filled with something different each time.
+   *  `position` — the same *kind* of thing, but a different one of several
+   *               identical siblings: the fourth star rather than the fifth.
+   *               A last resort, for elements with no other identity. */
+  kind: 'target' | 'value' | 'position';
   name: string;
   /** What it was on each run, in order. These are the examples the process
    *  was learned from, and the first evidence that it *is* a process. */
@@ -53,10 +56,14 @@ function commonPrefix(values: string[]): string {
  */
 function nameFor(
   step: RecordingStep,
-  kind: 'target' | 'value',
+  kind: 'target' | 'value' | 'position',
   index: number,
   examples: string[],
 ): string {
+  // A position is a number among identical things, so neither the values nor
+  // the element have a name to offer. Say what it is instead.
+  if (kind === 'position') return index === 0 ? 'which one' : `which one ${index + 1}`;
+
   // Trailing digits and separators are part of the values, not the name:
   // two samples share "ORD-100", three share "ORD-10", and neither is what
   // the thing is called. Trimming them back to "ORD" gives a name that
@@ -92,7 +99,9 @@ export function generalize(pattern: DetectedPattern): LearnedProcess {
     const instances = pattern.occurrences.map((occurrence) => occurrence[stepIndex]);
 
     const texts = instances.map(targetText);
-    if (texts[0] !== null && !allSame(texts)) {
+    const namesTheInstance = texts[0] !== null && !allSame(texts);
+
+    if (namesTheInstance) {
       const examples = texts.map((t) => t ?? '');
       variables.push({
         stepIndex,
@@ -100,6 +109,23 @@ export function generalize(pattern: DetectedPattern): LearnedProcess {
         name: nameFor(step, 'target', variables.length, examples),
         examples,
       });
+    }
+
+    // Only when nothing better identified it. A table row's structural path
+    // also carries an index that differs between runs, but the row already has
+    // a name of its own — asking for the row *and* its position would be two
+    // questions about one thing.
+    if (!namesTheInstance) {
+      const positions = instances.map(targetPosition);
+      const asText = positions.map((position) => (position === null ? null : String(position)));
+      if (asText[0] !== null && !allSame(asText)) {
+        variables.push({
+          stepIndex,
+          kind: 'position',
+          name: nameFor(step, 'position', variables.filter((v) => v.kind === 'position').length, []),
+          examples: asText.map((t) => t ?? ''),
+        });
+      }
     }
 
     const values = instances.map(actionValue);
@@ -138,7 +164,11 @@ export function generalize(pattern: DetectedPattern): LearnedProcess {
  */
 function pruneToConstant(occurrences: RecordingStep[][], variables: ProcessVariable[]): RecordingStep[] {
   const [template] = occurrences;
-  const varies = new Set(variables.filter((v) => v.kind === 'target').map((v) => v.stepIndex));
+  // A position varies by design too, so its candidates must survive intact —
+  // pruning to what every run agreed on would drop the very index that moves.
+  const varies = new Set(
+    variables.filter((v) => v.kind === 'target' || v.kind === 'position').map((v) => v.stepIndex),
+  );
 
   return template.map((step, stepIndex) => {
     const instances = occurrences.map((occurrence) => occurrence[stepIndex]);

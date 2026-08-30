@@ -28,9 +28,38 @@ function retarget(candidates: SelectorCandidate[], from: string, to: string): Se
     .map((candidate) => ({ ...candidate, value: candidate.value.split(from).join(to) }));
 }
 
+/**
+ * Points a step at a different one of several identical siblings.
+ *
+ * Everything else describing the element — the character it happened to be
+ * showing, a class shared by all of them — described the recorded one, and on
+ * a different sibling those are wrong rather than merely weaker. The position
+ * is the only thing that carries over, so it is the only thing kept.
+ */
+function reposition(candidates: SelectorCandidate[], to: string): SelectorCandidate[] {
+  const struct = candidates.find((candidate) => candidate.kind === 'struct');
+  if (!struct) return candidates;
+
+  const parts = struct.value.split('>');
+  const own = parts[parts.length - 1];
+  if (!/:nth-of-type\(\d+\)\s*$/.test(own.trim())) return candidates;
+
+  parts[parts.length - 1] = own.replace(/:nth-of-type\(\d+\)(\s*)$/, `:nth-of-type(${to})$1`);
+  return [{ ...struct, value: parts.join('>') }];
+}
+
 function applyVariable(step: RecordingStep, variable: ProcessVariable, value: string): RecordingStep {
   const from = variable.examples[0];
   if (from === value) return step;
+
+  if (variable.kind === 'position') {
+    if (!step.target) return step;
+    return {
+      ...step,
+      instanceTarget: true,
+      target: { ...step.target, candidates: reposition(step.target.candidates, value) },
+    };
+  }
 
   if (variable.kind === 'value') {
     const action = step.action;

@@ -358,27 +358,19 @@ test('a process with two inputs can be run with just the first', async ({ page }
   await gotoApp(page, 'v1');
   await watch(page);
 
-  // ORD-1000 is rated 4 and ORD-1001 rated 3, so clicking the same star reads
-  // as "★" on one pass and "☆" on the next. That makes the star look like a
-  // second input, when the person clicked the same star both times.
-  for (const id of ['ORD-1000', 'ORD-1001']) {
-    await openOrder(page, id);
-    await page.waitForTimeout(150);
-    await page.locator('#order-status').selectOption('cancelled');
-    await setStars(page, 4);
-    await page.getByRole('button', { name: 'Save order' }).click();
-    await page.waitForTimeout(150);
-  }
+  // Two genuine inputs: which order, and what to set it to.
+  await processOrder(page, 'ORD-1000', 'processing');
+  await processOrder(page, 'ORD-1001', 'shipped');
 
   const process = (await learned(page))!;
-  expect(process.variables.length).toBeGreaterThan(1);
+  expect(process.variables).toHaveLength(2);
 
-  // Supplying only the order has to work. Requiring a value for every input
-  // the tool thought it saw turns a process you could run with an order
-  // number into one you cannot run at all.
+  // Supplying only the first has to work. Requiring a value for every input
+  // turns a process you could run with an order number into one you cannot run
+  // at all; the rest simply repeat what was recorded.
   const results = await run(page, [['ORD-1002']]);
-  expect(results.flat().some((s) => s.status === 'failed')).toBe(false);
-  expect(await statusOf(page, 'ORD-1002')).toBe('cancelled');
+  expect(results.flat().map((s) => s.status)).not.toContain('failed');
+  expect(await statusOf(page, 'ORD-1002')).toBe('processing');
 });
 
 test('clicking the row itself, not a cell in it, still finds the input', async ({ page }) => {
@@ -408,4 +400,69 @@ test('clicking the row itself, not a cell in it, still finds the input', async (
   const results = await run(page, [['ORD-1044']]);
   expect(results.flat().map((s) => s.status)).not.toContain('failed');
   expect(await statusOf(page, 'ORD-1044')).toBe('cancelled');
+});
+
+/** What the rating widget currently shows, read from inside its shadow root. */
+const ratingOf = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (document.querySelector('x-rating') as HTMLElement & { value: number })?.value);
+
+test('a star clicked in the same place twice is not an input', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // ORD-1000 is rated 4 and ORD-1001 rated 3, so the *same* fourth star reads
+  // "★" on one pass and "☆" on the next. Identifying it by the character it
+  // happened to be showing turned one unchanging click into an input, and
+  // asked for a star every run — which nobody could answer, since neither
+  // character says which star it means.
+  for (const id of ['ORD-1000', 'ORD-1001']) {
+    await openOrder(page, id);
+    await page.waitForTimeout(150);
+    await page.locator('#order-status').selectOption('cancelled');
+    await setStars(page, 4);
+    await page.getByRole('button', { name: 'Save order' }).click();
+    await page.waitForTimeout(150);
+  }
+
+  const process = (await learned(page))!;
+  expect(process.variables).toHaveLength(1);
+  expect(process.variables[0].kind).toBe('target');
+
+  // The rating is part of the procedure now, not a question: same star, every
+  // run, without being asked for.
+  await run(page, [['ORD-1010']]);
+  await openOrder(page, 'ORD-1010');
+  await page.waitForTimeout(250);
+  expect(await ratingOf(page)).toBe(4);
+});
+
+test('a star clicked in a different place each time becomes a number', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // Third star, then fifth. Nothing about a star has a name, a role or usable
+  // text — the only thing separating the third from the fifth is that it is
+  // the third, and that number is already in the structural candidate replay
+  // uses to find it. Reading it back out is what makes it askable.
+  for (const [id, star] of [['ORD-1004', 3], ['ORD-1009', 5]] as const) {
+    await openOrder(page, id);
+    await page.waitForTimeout(150);
+    await page.locator('#order-status').selectOption('cancelled');
+    await setStars(page, star);
+    await page.getByRole('button', { name: 'Save order' }).click();
+    await page.waitForTimeout(150);
+  }
+
+  const process = (await learned(page))!;
+  const position = process.variables.find((v) => v.kind === 'position')!;
+  expect(position).toBeDefined();
+  expect(position.examples).toEqual(['3', '5']);
+
+  const values = process.variables.map((v) => (v.kind === 'position' ? '4' : 'ORD-1010'));
+  const results = await run(page, [values]);
+  expect(results.flat().map((s) => s.status)).not.toContain('failed');
+
+  await openOrder(page, 'ORD-1010');
+  await page.waitForTimeout(250);
+  expect(await ratingOf(page)).toBe(4);
 });

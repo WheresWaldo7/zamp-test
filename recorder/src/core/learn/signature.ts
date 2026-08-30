@@ -1,3 +1,4 @@
+import { STRATEGY_BY_KIND } from '../describe/strategies';
 import type { DescribedTarget, RecordingAction, RecordingStep } from '../describe/types';
 
 /**
@@ -91,5 +92,40 @@ export function targetText(step: RecordingStep): string | null {
   if (scope) return scope.text;
 
   const text = step.target?.candidates.find((c) => c.kind === 'text');
-  return text ? text.value.replace(/^text:"|"$/g, '') : null;
+  if (!text) return null;
+
+  // Only text that actually singled the element out. A rating star reads "☆"
+  // or "★" depending on the order's current score, and all five stars share
+  // those two characters — so clicking the same star on two differently-rated
+  // orders looked like choosing two different things, and the process started
+  // asking for a star as an input. Scoring already knows this: a candidate
+  // matching more than one element was marked down when it was captured. Text
+  // that could not identify the element on its own page cannot identify an
+  // instance on another one.
+  if (text.score < STRATEGY_BY_KIND.text.baseWeight) return null;
+
+  return text.value.replace(/^text:"|"$/g, '');
+}
+
+/**
+ * Which of its identical siblings this element is, when that is all there is
+ * to go on.
+ *
+ * Five rating stars have no text worth the name, no role and no label — the
+ * only thing separating the fourth from the fifth is that it is the fourth.
+ * That number already sits in the structural candidate, which is how replay
+ * finds the right star today; reading it back out is what lets it become
+ * something a person can ask for.
+ *
+ * Taken from the last segment only. A `div:nth-of-type(2) > span` path has an
+ * index in it that belongs to an ancestor, and rewriting that would move to a
+ * different row rather than a different star.
+ */
+export function targetPosition(step: RecordingStep): number | null {
+  const struct = step.target?.candidates.find((c) => c.kind === 'struct');
+  if (!struct) return null;
+
+  const own = struct.value.split('>').pop()?.trim() ?? '';
+  const match = own.match(/:nth-of-type\((\d+)\)$/);
+  return match ? Number(match[1]) : null;
 }
