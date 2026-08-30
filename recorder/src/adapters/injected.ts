@@ -187,11 +187,28 @@ recorder.onStep = (step) => {
  * and doing it live is what lets the offer arrive while the work is still in
  * front of the user, which is the only moment it is worth anything.
  */
+/** Everything the notice puts on screen, in the order it puts it there. Two
+ *  processes with the same shape look identical to the person reading it. */
+function displayShape(process: LearnedProcess | null): string {
+  if (!process) return '';
+  return JSON.stringify([
+    process.name,
+    process.occurrences,
+    process.variables.map((variable) => [variable.name, variable.examples]),
+  ]);
+}
+
 function noticeRepetition(): void {
   const pattern = detectRepetition(recording);
   const next = pattern ? generalize(pattern) : null;
 
-  const changed = next?.occurrences !== learnedProcess?.occurrences || next?.name !== learnedProcess?.name;
+  // Compared on everything the panel actually shows, not just the name and the
+  // count. Those two can hold still while the inputs underneath change — a new
+  // one appears, the order shifts, the examples grow — and the panel would go
+  // on displaying the old list while `learnedProcess` had already moved on.
+  // Someone then types values to match what they can see and the run puts them
+  // somewhere else entirely, which reads as the tool ignoring them.
+  const changed = displayShape(next) !== displayShape(learnedProcess);
   learnedProcess = next;
   if (next && changed) {
     panel.showLearned(next);
