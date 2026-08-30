@@ -1,10 +1,11 @@
 name: Deploy
 
-# The demo has to be reachable at a URL, and until this branch is merged it is
-# the only place the code exists — so it deploys from here as well as main.
+# Only from main. The Pages environment permits that branch and no other, and
+# keeping the trigger in step with that rule means a push to a feature branch
+# fails no jobs rather than failing one against a protection rule.
 on:
   push:
-    branches: [main, feature/zamp]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
