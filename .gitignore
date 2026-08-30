@@ -1,1 +1,10 @@
 plan.md
+
+# Playwright
+node_modules
+test-results
+playwright-report
+PR.md
+
+# build output
+app/dist

@@ -1,0 +1,78 @@
+/* v2: every class renamed, and the save action relocated into a toolbar at
+   the top of the pane instead of sitting at the bottom of the form. */
+
+.detailPane {
+  width: 340px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--panel-bg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.detailPaneEmpty {
+  width: 340px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--panel-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 14px;
+  padding: 20px;
+}
+
+/* The new home for the save action. */
+.paneToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.paneHeading { flex: 1; min-width: 0; }
+
+.orderName { font-size: 16px; font-weight: 600; margin: 0; }
+.orderMeta { font-size: 13px; color: var(--text); margin: 0; }
+
+.fieldGroup { display: flex; flex-direction: column; gap: 6px; }
+
+.fieldCaption {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.dropdown,
+.noteArea {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.noteArea { resize: vertical; min-height: 70px; }
+
+.commitAction {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.commitAction:active { transform: translateY(1px); }
+
+.commitConfirmation { font-size: 12px; color: #166534; text-align: center; }

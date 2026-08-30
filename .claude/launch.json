@@ -4,8 +4,9 @@
     {
       "name": "zamp-app",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "app", "run", "dev", "--", "--port", "5173", "--strictPort"],
-      "port": 5173
+      "runtimeArgs": ["--prefix", "app", "run", "dev"],
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }
