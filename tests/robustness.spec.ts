@@ -466,3 +466,58 @@ test('a star clicked in a different place each time becomes a number', async ({ 
   await page.waitForTimeout(250);
   expect(await ratingOf(page)).toBe(4);
 });
+
+/** One pass of "open an order, set its rating, note it, save". */
+async function rateOrder(page: import('@playwright/test').Page, id: string, star: number) {
+  await openOrder(page, id);
+  await page.waitForTimeout(200);
+  await setStars(page, star);
+  await page.locator('textarea').click();
+  await page.locator('textarea').fill('done');
+  await page.waitForTimeout(700);
+  await page.getByRole('button', { name: 'Save order' }).click();
+  await page.waitForTimeout(250);
+}
+
+test('a rating clicked in the same place twice is not an input', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  // The same star on two differently-rated orders. It reads "☆" uniquely on
+  // the one rated four and ambiguously on the one rated three, so one pass
+  // could describe it by text and the other could not. Treating "present
+  // once, missing once" as variation invented an input with a blank example,
+  // and then substituted against the single value it did have.
+  await rateOrder(page, 'ORD-1000', 5);
+  await rateOrder(page, 'ORD-1001', 5);
+
+  const process = (await learned(page))!;
+  expect(process.variables).toHaveLength(1);
+  expect(process.variables[0].examples).toEqual(['ORD-1000', 'ORD-1001']);
+});
+
+test('a rating clicked in a different place each time becomes a number', async ({ page }) => {
+  await gotoApp(page, 'v1');
+  await watch(page);
+
+  await rateOrder(page, 'ORD-1000', 3);
+  await rateOrder(page, 'ORD-1001', 5);
+
+  // Five stars have no text worth the name, no role and no label — the only
+  // thing separating the third from the fifth is that it is the third. That
+  // number is already in the structural candidate, which is how replay finds
+  // the right star; reading it back out is what makes it answerable.
+  const process = (await learned(page))!;
+  const position = process.variables.find((v) => v.kind === 'position')!;
+  expect(position).toBeDefined();
+  expect(position.examples).toEqual(['3', '5']);
+
+  const values = process.variables.map((v) => (v.kind === 'position' ? '4' : 'ORD-1044'));
+  const results = await run(page, [values]);
+  expect(results.flat().map((s) => s.status)).not.toContain('failed');
+
+  await openOrder(page, 'ORD-1044');
+  await expect
+    .poll(() => page.evaluate(() => (document.querySelector('x-rating') as HTMLElement & { value: number }).value))
+    .toBe(4);
+});

@@ -24,9 +24,16 @@ const MAX_TEXT = 80;
  * is — and correctly finds nothing on a list where no field is unique.
  */
 function identifyingText(container: Element, peers: Element[]): string | null {
-  for (const leaf of container.querySelectorAll('*')) {
-    if (leaf.children.length > 0) continue;
+  const leaves = Array.from(container.querySelectorAll('*')).filter((el) => el.children.length === 0);
 
+  // A unit whose text sits directly on it — a chip, a tag, a plain list item —
+  // has no inner element to read, so it speaks for itself. Without this such a
+  // unit got no scope at all and fell back to being identified by text that
+  // merely happened to be unique across the whole page, which "Pending" is not
+  // when every pending row also says it.
+  if (leaves.length === 0) leaves.push(container);
+
+  for (const leaf of leaves) {
     const text = (leaf.textContent ?? '').trim();
     if (text.length < MIN_TEXT || text.length > MAX_TEXT) continue;
 

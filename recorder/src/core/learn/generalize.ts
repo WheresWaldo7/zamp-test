@@ -37,6 +37,20 @@ function allSame(values: (string | null)[]): boolean {
   return values.every((v) => v === values[0]);
 }
 
+/**
+ * Whether every run had one of these, not just the first.
+ *
+ * Checking only the first run treated "present once, missing once" as
+ * variation, and produced an input with a blank example — then substituted
+ * against the one value it did have. A rating star reads "☆" uniquely on an
+ * order rated four and ambiguously on one rated three, so the same click
+ * produced a usable text on one pass and nothing on the next. Something a
+ * run could not describe is not something that run chose.
+ */
+function everyRunHasOne(values: (string | null)[]): boolean {
+  return values.every((value) => value !== null);
+}
+
 /** What the examples have in common. "ORD-1000" and "ORD-1001" share "ORD-",
  *  which is usually the most recognisable name the data itself can offer. */
 function commonPrefix(values: string[]): string {
@@ -99,7 +113,7 @@ export function generalize(pattern: DetectedPattern): LearnedProcess {
     const instances = pattern.occurrences.map((occurrence) => occurrence[stepIndex]);
 
     const texts = instances.map(targetText);
-    const namesTheInstance = texts[0] !== null && !allSame(texts);
+    const namesTheInstance = everyRunHasOne(texts) && !allSame(texts);
 
     if (namesTheInstance) {
       const examples = texts.map((t) => t ?? '');
@@ -118,7 +132,7 @@ export function generalize(pattern: DetectedPattern): LearnedProcess {
     if (!namesTheInstance) {
       const positions = instances.map(targetPosition);
       const asText = positions.map((position) => (position === null ? null : String(position)));
-      if (asText[0] !== null && !allSame(asText)) {
+      if (everyRunHasOne(asText) && !allSame(asText)) {
         variables.push({
           stepIndex,
           kind: 'position',
@@ -129,7 +143,7 @@ export function generalize(pattern: DetectedPattern): LearnedProcess {
     }
 
     const values = instances.map(actionValue);
-    if (values[0] !== null && !allSame(values)) {
+    if (everyRunHasOne(values) && !allSame(values)) {
       const examples = values.map((v) => v ?? '');
       variables.push({
         stepIndex,
@@ -209,7 +223,22 @@ function constantOf(
     ),
   );
 
-  return kept.length > 0 ? { ...template, candidates: kept } : template;
+  // A scope has to survive the same test, and it is the stronger claim of the
+  // two — replay resolves by it before falling back to candidates. Dropping
+  // varying candidates while keeping a scope that named one particular
+  // neighbour would pin the step to that neighbour by the back door, which is
+  // the whole thing this is meant to prevent.
+  const scopeVaries =
+    template.scope !== undefined &&
+    !others.every((other) => other.scope?.text === template.scope?.text);
+
+  const pruned: DescribedTarget = {
+    ...template,
+    candidates: kept.length > 0 ? kept : template.candidates,
+  };
+  if (scopeVaries) delete pruned.scope;
+
+  return pruned;
 }
 
 /**
